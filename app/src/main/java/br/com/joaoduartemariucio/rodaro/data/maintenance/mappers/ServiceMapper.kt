@@ -15,6 +15,8 @@ object ServiceMapper {
             odometer = model.odometer,
             cost = model.cost,
             notes = model.notes,
+            workshop = model.workshop,
+            createdAt = model.createdAt,
         )
 
     fun model(entity: ServiceEntry): ServiceEntryModel =
@@ -26,6 +28,8 @@ object ServiceMapper {
             odometer = entity.odometer,
             cost = entity.cost,
             notes = entity.notes,
+            workshop = entity.workshop,
+            createdAt = entity.createdAt,
         )
 
     fun entity(model: ServiceRuleModel): ServiceRule =

@@ -8,6 +8,7 @@ import br.com.joaoduartemariucio.rodaro.app.NoAnalytics
 import br.com.joaoduartemariucio.rodaro.domain.common.calculations.sum
 import br.com.joaoduartemariucio.rodaro.domain.common.services.Analytics
 import br.com.joaoduartemariucio.rodaro.domain.common.services.DateProvider
+import br.com.joaoduartemariucio.rodaro.domain.costs.repositories.ExpenseRepository
 import br.com.joaoduartemariucio.rodaro.domain.fueling.repositories.FuelEntryRepository
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.calculations.MaintenanceStatus
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.repositories.ServiceRepository
@@ -24,6 +25,7 @@ class VehicleListViewModel(
     private val vehicleRepository: VehicleRepository,
     private val fuelEntryRepository: FuelEntryRepository,
     private val serviceRepository: ServiceRepository,
+    private val expenseRepository: ExpenseRepository,
     private val dateProvider: DateProvider,
     private val reminders: ServiceReminderSync? = null,
     private val analytics: Analytics = NoAnalytics,
@@ -94,6 +96,7 @@ class VehicleListViewModel(
                                     rules = serviceRepository.rules(vehicle.id),
                                     now = dateProvider.now,
                                     zone = dateProvider.zone,
+                                    expenses = expenseRepository.expenses(vehicle.id),
                                 ),
                         )
                     },

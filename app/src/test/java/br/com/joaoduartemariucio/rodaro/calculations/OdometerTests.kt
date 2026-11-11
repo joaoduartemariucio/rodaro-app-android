@@ -6,6 +6,7 @@ import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.Vehicle
 import org.junit.Test
 import java.math.BigDecimal
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 class OdometerTests {
     @Test
@@ -57,5 +58,31 @@ class OdometerTests {
         assertEquals(3, samples.size)
         assertEquals(52_000.0, Odometer.current(samples))
         assertEquals(50_000.0, Odometer.current(Odometer.samples(vehicle, emptyList(), emptyList())))
+    }
+
+    @Test
+    fun `interpolation is linear between readings and exact at a reading`() {
+        val samples = listOf(sample(10, 2_000.0), sample(0, 1_000.0))
+
+        assertEquals(1_500.0, Odometer.interpolated(day(5), samples))
+        assertEquals(1_250.0, Odometer.interpolated(hour(12, 2), samples))
+        assertEquals(2_000.0, Odometer.interpolated(day(10), samples))
+        assertEquals(1_000.0, Odometer.interpolated(day(0), samples))
+    }
+
+    @Test
+    fun `interpolation outside the readings is unknown`() {
+        val samples = listOf(sample(0, 1_000.0), sample(10, 2_000.0))
+
+        assertNull(Odometer.interpolated(day(-1), samples))
+        assertNull(Odometer.interpolated(day(11), samples))
+        assertNull(Odometer.interpolated(day(0), emptyList()))
+    }
+
+    @Test
+    fun `readings that go backwards are skipped when interpolating`() {
+        val samples = listOf(sample(0, 1_000.0), sample(5, 800.0), sample(10, 2_000.0))
+
+        assertEquals(1_500.0, Odometer.interpolated(day(5), samples))
     }
 }

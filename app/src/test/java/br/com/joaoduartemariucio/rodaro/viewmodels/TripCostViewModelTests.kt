@@ -7,6 +7,8 @@ import br.com.joaoduartemariucio.rodaro.calculations.full
 import br.com.joaoduartemariucio.rodaro.calculations.testVehicleId
 import br.com.joaoduartemariucio.rodaro.domain.common.errors.RepositoryError
 import br.com.joaoduartemariucio.rodaro.domain.fueling.entities.FuelEntry
+import br.com.joaoduartemariucio.rodaro.domain.fueling.entities.FuelGroup
+import br.com.joaoduartemariucio.rodaro.domain.fueling.entities.FuelType
 import br.com.joaoduartemariucio.rodaro.domain.preferences.entities.Preferences
 import br.com.joaoduartemariucio.rodaro.domain.preferences.entities.UnitSystem
 import br.com.joaoduartemariucio.rodaro.domain.trips.entities.PlaceSuggestion
@@ -561,6 +563,37 @@ class TripCostViewModelTests {
             assertEquals(day(10), viewModel.lastPriceDate)
             assertFalse(viewModel.canUseAverageConsumption)
             assertFalse(viewModel.canUseLastPrice)
+        }
+
+    @Test
+    fun `the suggested consumption uses the latest fuel when there is per-fuel data`() =
+        runTest {
+            val fuel =
+                listOf(
+                    full(0, 1_000.0, 40.0, fuelType = FuelType.GASOLINA_COMUM),
+                    full(5, 1_560.0, 40.0, fuelType = FuelType.GASOLINA_COMUM),
+                    full(10, 2_120.0, 40.0, fuelType = FuelType.ETANOL),
+                    full(15, 2_520.0, 40.0, fuelType = FuelType.ETANOL),
+                    full(20, 2_920.0, 40.0, fuelType = FuelType.ETANOL),
+                )
+            val viewModel = makeViewModel(fuel = fuel)
+
+            viewModel.load()
+
+            assertEquals(FuelGroup.ETANOL, viewModel.suggestedConsumptionGroup)
+            assertEquals(1, viewModel.averageConsumptionSamples)
+            assertEquals(10.0, viewModel.parsedConsumption!!, 0.05)
+        }
+
+    @Test
+    fun `without per-fuel data the overall average is used`() =
+        runTest {
+            val viewModel = makeViewModel()
+
+            viewModel.load()
+
+            assertNull(viewModel.suggestedConsumptionGroup)
+            assertEquals(12.5, viewModel.parsedConsumption!!, 0.05)
         }
 
     @Test

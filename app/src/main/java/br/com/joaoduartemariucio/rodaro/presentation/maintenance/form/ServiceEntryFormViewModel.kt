@@ -7,11 +7,13 @@ import androidx.lifecycle.ViewModel
 import br.com.joaoduartemariucio.rodaro.app.NoAnalytics
 import br.com.joaoduartemariucio.rodaro.domain.common.services.Analytics
 import br.com.joaoduartemariucio.rodaro.domain.common.services.DateProvider
+import br.com.joaoduartemariucio.rodaro.domain.maintenance.calculations.ServiceApplicability
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.entities.ServiceEntry
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.entities.ServiceKind
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.repositories.ServiceRepository
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.calculations.Odometer
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.OdometerSample
+import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.VehicleKind
 import br.com.joaoduartemariucio.rodaro.presentation.common.FormState
 import br.com.joaoduartemariucio.rodaro.presentation.common.NumberInput
 import br.com.joaoduartemariucio.rodaro.presentation.common.UnitConversion
@@ -25,9 +27,10 @@ import kotlin.coroutines.cancellation.CancellationException
 class ServiceEntryFormViewModel(
     private val mode: Mode,
     private val repository: ServiceRepository,
-    dateProvider: DateProvider,
+    private val dateProvider: DateProvider,
     private val otherReadings: List<OdometerSample>,
     private val analytics: Analytics = NoAnalytics,
+    vehicleKind: VehicleKind = VehicleKind.CAR,
 ) : ViewModel() {
     sealed interface Mode {
         data class Create(
@@ -50,9 +53,17 @@ class ServiceEntryFormViewModel(
     )
     var cost by mutableStateOf(if (mode is Mode.Edit) NumberInput.text(mode.entry.cost, NumberInput.Style.MONEY) else "")
     var notes by mutableStateOf(if (mode is Mode.Edit) mode.entry.notes else "")
+    var workshop by mutableStateOf(if (mode is Mode.Edit) mode.entry.workshop.orEmpty() else "")
+
+    val parsedWorkshop: String? get() = workshop.trim().takeIf { it.isNotEmpty() }
 
     var state: FormState by mutableStateOf(FormState.Editing)
         private set
+
+    val availableKinds: List<ServiceKind> =
+        ServiceApplicability.kinds(vehicleKind).let { kinds ->
+            if (kind in kinds) kinds else kinds.dropLast(1) + kind + kinds.last()
+        }
 
     val parsedOdometer: Double?
         get() = NumberInput.double(odometer, NumberInput.Style.KILOMETERS)?.let(UnitConversion::distanceToKilometers)
@@ -104,11 +115,20 @@ class ServiceEntryFormViewModel(
                     odometer = odometer,
                     cost = parsedCost,
                     notes = trimmedNotes,
+                    workshop = parsedWorkshop,
+                    createdAt = dateProvider.now,
                 )
             }
 
             is Mode.Edit -> {
-                mode.entry.copy(kind = kind, date = date, odometer = odometer, cost = parsedCost, notes = trimmedNotes)
+                mode.entry.copy(
+                    kind = kind,
+                    date = date,
+                    odometer = odometer,
+                    cost = parsedCost,
+                    notes = trimmedNotes,
+                    workshop = parsedWorkshop,
+                )
             }
         }
     }

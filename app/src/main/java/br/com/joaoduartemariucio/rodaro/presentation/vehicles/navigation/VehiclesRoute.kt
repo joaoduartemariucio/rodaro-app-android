@@ -11,4 +11,8 @@ sealed interface VehiclesRoute : Route {
     data class VehicleDetail(
         val vehicle: Vehicle,
     ) : VehiclesRoute
+
+    data class YearReview(
+        val vehicle: Vehicle,
+    ) : VehiclesRoute
 }

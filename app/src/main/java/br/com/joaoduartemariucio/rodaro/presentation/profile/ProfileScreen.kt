@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.DirectionsCar
@@ -77,6 +78,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import br.com.joaoduartemariucio.rodaro.R
 import br.com.joaoduartemariucio.rodaro.app.LocalDependencies
 import br.com.joaoduartemariucio.rodaro.domain.common.services.Account
+import br.com.joaoduartemariucio.rodaro.domain.dues.calculations.DueSchedule
+import br.com.joaoduartemariucio.rodaro.domain.dues.entities.DueItem
+import br.com.joaoduartemariucio.rodaro.domain.dues.entities.DueKind
 import br.com.joaoduartemariucio.rodaro.domain.preferences.entities.LanguageOption
 import br.com.joaoduartemariucio.rodaro.domain.preferences.entities.UnitSystem
 import br.com.joaoduartemariucio.rodaro.presentation.common.Chip
@@ -88,7 +92,11 @@ import br.com.joaoduartemariucio.rodaro.presentation.common.SectionCard
 import br.com.joaoduartemariucio.rodaro.presentation.common.SectionHeader
 import br.com.joaoduartemariucio.rodaro.presentation.common.StoreLinks
 import br.com.joaoduartemariucio.rodaro.presentation.common.formattedCurrency
+import br.com.joaoduartemariucio.rodaro.presentation.dues.form.DueItemFormDialog
+import br.com.joaoduartemariucio.rodaro.presentation.dues.form.DueItemFormViewModel
+import br.com.joaoduartemariucio.rodaro.presentation.dues.payment.DuePaymentDialog
 import br.com.joaoduartemariucio.rodaro.presentation.preferences.PreferencesSection
+import br.com.joaoduartemariucio.rodaro.presentation.vehicles.detail.components.DueItemRow
 import kotlinx.coroutines.launch
 import java.util.Currency
 import java.util.Locale
@@ -109,9 +117,12 @@ fun ProfileScreen(
                 vehicleRepository = dependencies.vehicleRepository,
                 fuelEntryRepository = dependencies.fuelEntryRepository,
                 serviceRepository = dependencies.serviceRepository,
+                expenseRepository = dependencies.expenseRepository,
+                dueItemRepository = dependencies.dueItemRepository,
                 preferencesRepository = dependencies.preferencesRepository,
                 clearLocalData = dependencies.clearLocalData,
                 analytics = dependencies.analytics,
+                reminders = dependencies.reminderSync,
             )
         }
     val coroutines = rememberCoroutineScope()
@@ -128,8 +139,28 @@ fun ProfileScreen(
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     var confirmingDelete by remember { mutableStateOf(false) }
     var password by remember { mutableStateOf("") }
+    var driverSheet by remember { mutableStateOf<DriverSheet?>(null) }
 
     LaunchedEffect(viewModel) { viewModel.load() }
+
+    val driverChanged: () -> Unit = { coroutines.launch { viewModel.driverItemsChanged() } }
+    when (val sheet = driverSheet) {
+        DriverSheet.New -> {
+            DueItemFormDialog(DueItemFormViewModel.Mode.Create(vehicle = null, kind = DueKind.CNH), driverChanged) { driverSheet = null }
+        }
+
+        is DriverSheet.Edit -> {
+            DueItemFormDialog(DueItemFormViewModel.Mode.Edit(sheet.item, vehicle = null), driverChanged) { driverSheet = null }
+        }
+
+        is DriverSheet.Pay -> {
+            DuePaymentDialog(sheet.item, driverChanged) { driverSheet = null }
+        }
+
+        null -> {
+            Unit
+        }
+    }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -155,6 +186,34 @@ fun ProfileScreen(
             IdentityCard(viewModel.account, viewModel.initials, onSignIn)
 
             viewModel.summary?.let { summary -> GarageSummary(summary) }
+
+            SectionTitle(stringResource(R.string.profile_driver))
+            SectionCard(contentPadding = RowsPadding) {
+                for (item in viewModel.driverItems) {
+                    Box(Modifier.clickable { driverSheet = DriverSheet.Edit(item) }.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                        DueItemRow(
+                            item = item,
+                            level =
+                                DueSchedule.level(
+                                    item,
+                                    dependencies.dateProvider.now
+                                        .atZone(dependencies.dateProvider.zone)
+                                        .toLocalDate(),
+                                ),
+                            zone = dependencies.dateProvider.zone,
+                            onPay = if (item.isPaid) null else ({ driverSheet = DriverSheet.Pay(item) }),
+                        )
+                    }
+                    RowDivider()
+                }
+                ProfileRow(
+                    icon = Icons.Filled.Badge,
+                    tint = Palette.blue,
+                    title = stringResource(R.string.profile_cnh_add),
+                    value = stringResource(R.string.profile_cnh_caption),
+                    onClick = { driverSheet = DriverSheet.New },
+                )
+            }
 
             SectionTitle(stringResource(R.string.profile_settings))
             SectionCard(contentPadding = RowsPadding) {
@@ -505,6 +564,18 @@ private fun Avatar(initials: String?) {
             )
         }
     }
+}
+
+private sealed interface DriverSheet {
+    data object New : DriverSheet
+
+    data class Edit(
+        val item: DueItem,
+    ) : DriverSheet
+
+    data class Pay(
+        val item: DueItem,
+    ) : DriverSheet
 }
 
 @Composable

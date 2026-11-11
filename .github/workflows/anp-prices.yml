@@ -1,0 +1,72 @@
+name: ANP prices
+
+on:
+  schedule:
+    - cron: "0 13 * * 2"
+    - cron: "0 13 * * 5"
+  workflow_dispatch:
+    inputs:
+      weeks:
+        description: Newest weekly summaries to download (a full 52-week backfill happens on its own when nothing is published)
+        default: "3"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: anp-prices
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build and deploy precos-uf.json
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Script tests
+        run: make scripts-test
+
+      - name: Build the JSON from the published copy and the newest ANP summaries
+        id: build
+        env:
+          WEEKS: ${{ github.event.inputs.weeks || '3' }}
+        run: |
+          python3 scripts/anp_prices.py \
+            --existing https://rodaro.web.app/anp/precos-uf.json \
+            --output hosting/public/anp/precos-uf.json \
+            --weeks "$WEEKS"
+
+      - name: Write the Hosting credentials
+        id: credentials
+        if: steps.build.outputs.changed == 'true' && github.ref == 'refs/heads/main'
+        env:
+          FIREBASE_HOSTING_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_HOSTING_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$FIREBASE_HOSTING_SERVICE_ACCOUNT" ]; then
+            echo "::warning::FIREBASE_HOSTING_SERVICE_ACCOUNT is not set; the new ANP averages were built but not deployed."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          printf '%s' "$FIREBASE_HOSTING_SERVICE_ACCOUNT" > "$RUNNER_TEMP/hosting-account.json"
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy Firebase Hosting
+        if: steps.credentials.outputs.ready == 'true' && github.ref == 'refs/heads/main'
+        run: |
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/hosting-account.json"
+          npx --yes firebase-tools@14.11.0 deploy --only hosting --project rodaro --non-interactive
+
+      - name: Remove the Hosting credentials
+        if: always()
+        run: rm -f "$RUNNER_TEMP/hosting-account.json"
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "changed=${{ steps.build.outputs.changed || 'unknown' }}" >> "$GITHUB_STEP_SUMMARY"

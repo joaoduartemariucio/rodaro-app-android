@@ -5,6 +5,7 @@ import br.com.joaoduartemariucio.rodaro.domain.preferences.entities.CurrencyOpti
 import java.math.BigDecimal
 import java.text.NumberFormat
 import java.time.Instant
+import java.time.YearMonth
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
@@ -118,5 +119,8 @@ fun Instant.formattedFullDate(zone: ZoneId = ZoneId.systemDefault()): String =
     DateTimeFormatter.ofLocalizedDate(FormatStyle.LONG).withLocale(Locale.getDefault()).format(atZone(zone))
 
 fun Instant.formattedMonthAndYear(zone: ZoneId = ZoneId.systemDefault()): String = Formats.date(this, "MMMMyyyy", zone)
+
+fun YearMonth.formattedShortMonthAndYear(zone: ZoneId = ZoneId.systemDefault()): String =
+    Formats.date(atDay(1).atStartOfDay(zone).toInstant(), "MMMyyyy", zone)
 
 fun Instant.formattedShortMonth(zone: ZoneId = ZoneId.systemDefault()): String = Formats.date(this, "MMM", zone)

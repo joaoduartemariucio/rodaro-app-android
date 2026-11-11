@@ -2,13 +2,18 @@ package br.com.joaoduartemariucio.rodaro.viewmodels
 
 import br.com.joaoduartemariucio.rodaro.calculations.assertDecimal
 import br.com.joaoduartemariucio.rodaro.calculations.day
+import br.com.joaoduartemariucio.rodaro.calculations.expense
 import br.com.joaoduartemariucio.rodaro.domain.common.errors.RepositoryError
+import br.com.joaoduartemariucio.rodaro.domain.costs.entities.Expense
+import br.com.joaoduartemariucio.rodaro.domain.costs.entities.ExpenseCategory
+import br.com.joaoduartemariucio.rodaro.domain.costs.entities.FineDetails
 import br.com.joaoduartemariucio.rodaro.domain.fueling.entities.FuelEntry
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.entities.ServiceEntry
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.entities.ServiceKind
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.entities.ServiceRule
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.Vehicle
 import br.com.joaoduartemariucio.rodaro.fakes.FixedDateProvider
+import br.com.joaoduartemariucio.rodaro.fakes.InMemoryExpenseRepository
 import br.com.joaoduartemariucio.rodaro.fakes.InMemoryFuelEntryRepository
 import br.com.joaoduartemariucio.rodaro.fakes.InMemoryServiceRepository
 import br.com.joaoduartemariucio.rodaro.fakes.InMemoryVehicleRepository
@@ -39,11 +44,13 @@ class VehicleListViewModelTests {
         rules: List<ServiceRule> = emptyList(),
         now: Instant = day(60),
         failure: Exception? = null,
+        expenses: List<Expense> = emptyList(),
     ) = VehicleListViewModel(
         scope = scope,
         vehicleRepository = InMemoryVehicleRepository(vehicles, failure),
         fuelEntryRepository = InMemoryFuelEntryRepository(fuel),
         serviceRepository = InMemoryServiceRepository(services, rules),
+        expenseRepository = InMemoryExpenseRepository(expenses),
         dateProvider = FixedDateProvider(now),
     )
 
@@ -169,5 +176,30 @@ class VehicleListViewModelTests {
             assertDecimal("30", overview?.spentThisMonth)
             assertEquals(1, overview?.overdueCount)
             assertEquals(1, overview?.dueSoonCount)
+        }
+
+    @Test
+    fun `this month's spending includes paid expenses but not unpaid fines`() =
+        runTest {
+            val gol = vehicle("Gol")
+            val viewModel =
+                makeViewModel(
+                    vehicles = listOf(gol),
+                    fuel = listOf(fuel(gol, 62, 1_000.0, liters = 10.0)),
+                    expenses =
+                        listOf(
+                            expense(ExpenseCategory.MULTA, "100", dayOffset = 63, fine = FineDetails(), vehicleId = gol.id),
+                            expense(ExpenseCategory.MULTA, "300", dayOffset = 63, fine = FineDetails(isPaid = false), vehicleId = gol.id),
+                            expense(ExpenseCategory.FINANCIAMENTO, "500", dayOffset = 64, vehicleId = gol.id),
+                            expense(ExpenseCategory.ACESSORIOS, "80", dayOffset = 65, vehicleId = gol.id),
+                        ),
+                    now = day(70),
+                )
+
+            viewModel.load()
+
+            assertDecimal("730", viewModel.overview?.spentThisMonth)
+            val stats = assertIs<VehicleListViewModel.State.Loaded>(viewModel.state).rows.single().stats
+            assertDecimal("730", stats.cost.totalSpent)
         }
 }

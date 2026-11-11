@@ -60,7 +60,7 @@
   </header>
 
   <h1>Política de Privacidade</h1>
-  <p class="updated">Versão 2 · vigente desde 6 de novembro de 2026</p>
+  <p class="updated">Versão 3 · vigente desde 11 de novembro de 2026</p>
 
   <section>
     <h2>Resumo</h2>
@@ -69,6 +69,7 @@
       <div><b>Conta opcional</b>Sem conta o app funciona igual. Se você entrar com Google ou e-mail, guardamos apenas o cadastro da conta.</div>
       <div><b>Seus registros ficam no aparelho</b>Veículos, abastecimentos, serviços e rotas salvas não são enviados para nós.</div>
       <div><b>Cálculo de rota</b>Origem e destino que você digita vão ao OpenRouteService só para achar a distância.</div>
+      <div><b>Valor FIPE e médias da ANP</b>Só os códigos da tabela FIPE do modelo escolhido vão ao parallelum; as médias da ANP são baixadas do nosso site. Nenhum dos dois recebe placa ou registros.</div>
       <div><b>Serviços do Google</b>Estatísticas de uso, relatórios de falhas, desempenho, notificações e anúncios. Você pode desligar as estatísticas no app.</div>
       <div><b>Anúncios sem perfil por padrão</b>Anúncios personalizados só se você ativar em Preferências.</div>
       <div><b>Não vendemos dados</b>Nenhuma informação sua é vendida ou alugada.</div>
@@ -110,7 +111,7 @@
     <p>Tudo o que você digita no Rodaro fica salvo <b>somente no banco de dados do seu aparelho</b>. Não temos servidor próprio e não recebemos uma cópia desses registros. A única exceção é a origem e o destino de uma rota, que são enviados ao OpenRouteService para calcular a distância (<a href="#rotas">seção 3</a>).</p>
     <p>Se você optar por entrar com Google ou com e-mail e senha, o <b>Firebase Authentication</b> guarda o cadastro da sua conta (e-mail e, no login com Google, o nome que a sua conta Google fornece) somente para manter você conectado. Nada disso é usado para os seus registros de veículos, que continuam só no aparelho.</p>
     <ul>
-      <li><b>Veículos:</b> nome ou apelido, tipo (carro ou moto), placa (opcional), quilometragem inicial, capacidade do tanque (opcional), data de cadastro e se está arquivado.</li>
+      <li><b>Veículos:</b> nome ou apelido, tipo (carro ou moto), placa (opcional), quilometragem inicial, capacidade do tanque (opcional), combustíveis aceitos, estado (UF), ano-modelo, modelo na tabela FIPE com os valores consultados, data e valor da compra (opcionais), data de cadastro e se está arquivado.</li>
       <li><b>Abastecimentos:</b> data, quilometragem, litros, preço por litro e se o tanque foi completado.</li>
       <li><b>Serviços de manutenção:</b> tipo de serviço (troca de óleo, pneus, filtros etc.), data, quilometragem, custo e observações que você escrever.</li>
       <li><b>Lembretes:</b> intervalo em quilômetros e/ou meses de cada serviço.</li>
@@ -149,6 +150,27 @@
       </table>
     </div>
     <p class="muted">Esses serviços tratam os dados conforme as próprias políticas, publicadas em <a href="https://openrouteservice.org">openrouteservice.org</a> e <a href="https://openfreemap.org">openfreemap.org</a>. O OpenRouteService fica na Alemanha (União Europeia), sob o Regulamento Geral de Proteção de Dados (GDPR).</p>
+    <h3>Valor FIPE e preços médios da ANP</h3>
+    <div class="table">
+      <table>
+        <thead>
+          <tr><th>Serviço</th><th>O que recebe</th><th>Para quê</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td data-label="Serviço"><b>parallelum FIPE API</b> (fipe.parallelum.com.br, serviço independente e não oficial; não é do Google nem da Fundação FIPE)</td>
+            <td data-label="O que recebe">Só quando você escolhe um modelo na tabela FIPE e, depois, no máximo uma vez por mês por veículo: os códigos de marca, modelo e ano, o código FIPE, o endereço IP do aparelho e a versão do app. Não recebe placa, conta, registros nem gastos.</td>
+            <td data-label="Para quê">Listar marcas, modelos e anos e trazer o valor de tabela do veículo, usado para mostrar o valor e a depreciação.</td>
+          </tr>
+          <tr>
+            <td data-label="Serviço"><b>Nosso site</b> (rodaro.web.app, no Firebase Hosting do Google)</td>
+            <td data-label="O que recebe">Um pedido do arquivo público com as médias semanais da ANP por estado, no máximo uma vez por dia, com o endereço IP do aparelho. Nada sobre o seu veículo é enviado: a comparação com o preço que você pagou é feita no aparelho.</td>
+            <td data-label="Para quê">Dizer se o preço de um abastecimento ficou abaixo, na média ou acima da média do estado do veículo.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="muted">Os valores FIPE e as médias da ANP só aparecem quando a moeda do app é o real. O <b>histórico em PDF</b> é gerado no próprio aparelho e só vai para onde você enviar ou salvar; ele nunca inclui seu nome, contato, multas, seguro, IPVA ou financiamento, e os valores gastos e a placa completa só entram se você ativar.</p>
   </section>
 
   <section id="automaticos">
@@ -260,8 +282,9 @@
       <li><b>Google LLC</b> (Estados Unidos): dados técnicos da seção 4, como operador; no caso dos anúncios, também segundo as políticas do próprio Google.</li>
       <li><b>HeiGIT gGmbH</b>, responsável pelo OpenRouteService (Alemanha): origem e destino das rotas, como descrito na seção 3.</li>
       <li><b>OpenFreeMap</b>: pedidos de partes do mapa, como descrito na seção 3.</li>
+      <li><b>parallelum FIPE API</b> (serviço independente): códigos da tabela FIPE do modelo escolhido e o endereço IP, como descrito na seção 3.</li>
     </ul>
-    <p>Esses serviços processam dados <b>fora do Brasil</b>. Para a conta, o cálculo de rota e o mapa, a transferência é necessária para executar o serviço que você pediu (LGPD, art. 33, IX). Para estatísticas, falhas, notificações e anúncios, ela se apoia nas garantias contratuais oferecidas pelo Google (art. 33, II).</p>
+    <p>Esses serviços processam dados <b>fora do Brasil</b>. Para a conta, o cálculo de rota, o mapa e a consulta do valor FIPE, a transferência é necessária para executar o serviço que você pediu (LGPD, art. 33, IX). Para estatísticas, falhas, notificações e anúncios, ela se apoia nas garantias contratuais oferecidas pelo Google (art. 33, II).</p>
     <p>Podemos fornecer informações se formos obrigados por lei ou por ordem judicial.</p>
   </section>
 

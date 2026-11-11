@@ -7,6 +7,28 @@ why, and what it costs. Newest first within each group. Product decisions are sh
 
 ## Platform parity
 
+### Android: FIPE value, ANP comparison, Retrospectiva and history PDF are Android only
+
+Phase B (FIPE value and depreciation, the ANP state-average badge, the per-year Retrospectiva and
+the history PDF) exists only on Android for now. It ships in the same release as phase A, so the
+backup stays at `formatVersion` 2 and the FIPE data travels as optional v2 keys (see "Manual
+backup"). The ANP JSON at `https://rodaro.web.app/anp/precos-uf.json` is public and versioned, so
+iOS can read it later without changes on our side.
+
+### Android: phase A features are Android only, so the backup file moved to version 2
+
+Fuel types, vehicle fuel capability, UF and model year, workshop, other expenses, due items
+(IPVA, licenciamento, seguro, CNH) and the nine new service kinds exist only on Android for now.
+The backup writes them as new keys and bumps `formatVersion` to **2**.
+
+- **Why bump:** restore replaces everything. An iOS app or an older Android build reading the
+  new keys as unknown would silently drop expenses, due items and fuel types — real data loss.
+  With version 2 those readers refuse the file with "update the app" instead.
+- **Cost:** Android backups cannot be restored on iOS until iOS adds a version 2 branch. The
+  reader still decodes version 1 through the same branch, and `backup/v1.json` keeps passing.
+- **New service kinds on iOS:** their raw values (`timingBelt`, `chainKit`, …) are unknown there
+  and decode as `other`, the existing fallback. Acceptable until iOS adds them.
+
 ### Android: privacy controls (LGPD)
 
 Result of an LGPD audit (2026-11-06). The privacy policy v2 describes all of it.
@@ -113,7 +135,12 @@ Performance plugin 2.0.2, `play-services-ads` 25.5.0.
 - **app-ads.txt:** served by Firebase Hosting of the same project, at
   `https://rodaro.web.app/app-ads.txt` (`hosting/public/`, `firebase.json`). That domain is the
   developer website on the Play Store listing, so AdMob can verify the publisher
-  `pub-1068825778444539`. Deploy with `firebase deploy --only hosting`.
+  `pub-1068825778444539`. Deploy with `make hosting-deploy`, never with a bare
+  `firebase deploy`: the ANP averages (`hosting/public/anp/`) are not in git, and a deploy
+  replaces the whole site, so the target rebuilds the JSON from the published copy first (see
+  "ANP averages are published by our own weekly job"). If that rebuild fails (gov.br down), it
+  stops before deploying; `make hosting-deploy-keep-anp` then ships the site with the live JSON
+  copied unchanged.
 - **Privacy policy:** `https://rodaro.web.app/privacidade` (`hosting/public/privacidade.html`, in
   pt-BR). It lists what stays on the device, what each Google service collects, the Android
   backup, permissions and LGPD rights. It must change whenever a feature, SDK or permission
@@ -215,10 +242,20 @@ types read it from a plain `Context` without a repository or a coroutine graph.
 ### Two independent notification switches
 
 "Push" (`pushEnabled`) gates the remote FCM channel (`PushMessagingService` drops messages when
-off) and "Maintenance reminders" (`remindersEnabled`) gates local WorkManager jobs
+off) and "Reminders" (`remindersEnabled`) gates local WorkManager jobs
 (`ServiceReminderSync` cancels every pending reminder and `ReminderWorker` returns early when
 off). One combined switch would force users who want local oil-change alerts to also accept
 marketing push, or the opposite.
+
+### One reminders switch for maintenance, documents and fines
+
+Document (IPVA, licenciamento, seguro, CNH) and fine reminders reuse `remindersEnabled`, now
+labelled "Lembretes — Manutenção, documentos e multas". The preference key and the
+notification channel id did not change.
+
+- **Why:** a second switch would need a category on `Reminder`, in the worker's input data and
+  in the "cancel everything" path. One local-reminders switch keeps all of that unchanged.
+- **Cost:** a user cannot keep oil-change alerts and silence IPVA ones.
 
 ### Android: the app language goes through the platform `LocaleManager`
 
@@ -237,6 +274,41 @@ reapplies it on the next launch. `android:localeConfig` stays; older versions ig
 - **Cost:** two code paths for one setting.
 
 ## Data entry
+
+### Refunds are a toggle, not a negative mask
+
+Expense amounts may be negative (a refund or reimbursement), but the digit-shifting
+`NumberInput` mask has no minus sign. The expense form has an "Estorno/reembolso" switch that
+negates the parsed amount; editing a negative expense shows the absolute value with the switch on.
+
+### Default service intervals are suggestions; confirm in the manual
+
+A new reminder rule starts with `ServiceDefaults.interval(kind, vehicleKind)` (oil 10 000 km /
+12 months for cars, 3 000 km / 6 months for motorcycles, …), shown in the user's distance unit.
+Changing the service, or the vehicle kind, replaces the values only while they are empty or still
+the previous suggestion, compared as displayed text, so a number the user typed is never
+overwritten. While a suggestion is shown the row says "Sugestão; confirme no manual do veículo";
+the hint is stronger for timing belt, transmission oil and every motorcycle service, where models
+vary most. Rules whose kind no longer applies to the vehicle kind are kept and still offered.
+
+### The service grid only shows services that apply
+
+`ServiceApplicability` lists the services per vehicle kind (no chain for cars, no timing belt for
+motorcycles; `other` always last). Editing an entry of a kind that no longer applies still offers
+that kind, so old data stays editable.
+
+### Fuel type is required on new fuel-ups, never on old ones
+
+A new fuel-up starts with the last typed fuel if the vehicle still takes it, or the only fuel it
+takes; a flex car with no typed history must pick one (a blocking issue). Editing a legacy
+fuel-up with no type is allowed and keeps it unknown. When the type changes and the price is still
+the suggestion, the price follows the latest price of the new type (or clears when there is none).
+
+### Model year is a plain four-digit field
+
+`NumberInput.Style.Integer` groups thousands ("2.024"), so the model year is a digits-only
+`String` of at most four characters. It must be between 1900 and next year, taken from the
+injected clock.
 
 ### Odometer out of order is a warning, not an error
 
@@ -315,8 +387,8 @@ out. `BackupRulesTests` checks that the three sections list the same files.
 
 Profile → Backup and export writes a JSON file through the Storage Access Framework
 (`CreateDocument`) and restores one picked with `OpenDocument`. The file is
-`{ format: "rodaro.backup", formatVersion: 1, exportedAt, app, vehicles, fuelEntries,
-serviceEntries, serviceRules, savedRoutes, preferences }`: money as plain decimal strings,
+`{ format: "rodaro.backup", formatVersion: 2, exportedAt, app, vehicles, fuelEntries,
+serviceEntries, serviceRules, savedRoutes, expenses, dueItems, preferences }`: money as plain decimal strings,
 instants in UTC with milliseconds, lowercase UUIDs (read case-insensitively), enums by their
 raw value (`"car"`, `"oilChange"`, `"BRL"`, `"metric"`, `"pt-BR"`, `"system"`) and the route path as
 a precision-6 polyline. `JsonBackupCodec` reads it; `BackupValidation` (Domain) rejects files
@@ -355,6 +427,23 @@ screen show what is in the file next to what is on the phone and ask before repl
   suggests exporting first. Files are capped at 32 MB of text.
 - **iOS parity:** the format is shared. `app/src/test/resources/backup/v1.json` is the contract:
   it is never edited, and both apps must keep decoding it.
+- **Version 2:** adds `fuelCapability`, `uf` and `modelYear` to vehicles, `fuelType` and
+  `createdAt` to fuel-ups, `workshop` and `createdAt` to services, and the `expenses` and
+  `dueItems` arrays (local dates as `"yyyy-MM-dd"`, fines nested under `fine`). A v1 file reads
+  with flex vehicles, unknown fuel types, `createdAt` equal to the date and no expenses. An unknown
+  fuel type stays unknown, an unknown expense category becomes `other` and a due item of an
+  unknown kind is dropped. `backup/v2.json` is the new golden file and is never edited either.
+  `replaceAll` deletes `due_items` explicitly, because driver-license rows have no vehicle and the
+  cascade would not remove them. See "phase A features are Android only" for why it was bumped.
+- **FIPE (still version 2):** vehicles gain an optional `fipe` object (`code`, `yearCode`, `brand`,
+  `model`, `year`), `purchaseDate` (`"yyyy-MM-dd"`) and `purchasePrice` (decimal string), and the
+  file gains `fipeQuotes` (`id`, `vehicleId`, `fipeCode`, `yearCode`, `month` as `"yyyy-MM"`,
+  `price`, `fetchedAt`). They are optional keys of version 2, not version 3, because phase A and
+  phase B ship in the same release: no released reader knows a version 2 without them. A quote
+  with an unreadable month or price is dropped instead of failing the file — quotes are derived
+  data. Quotes matter in a backup because the free FIPE history only reaches about three months
+  back; a lost start quote cannot be fetched again. The ANP cache and generated PDFs are never
+  backed up, and `filesDir/anp` is outside the Auto Backup allowlist.
 
 ### Spreadsheet export is a read-only CSV
 
@@ -370,6 +459,10 @@ a leading `'` so a spreadsheet does not run it as a formula.
   to filter than one file per vehicle.
 - **Cost:** it cannot be restored — the JSON backup is the restorable format — and saved routes
   and reminder rules are not in it.
+- **Expenses:** three trailing columns were added (fuel type, workshop, category) and paid
+  expenses are rows of type "Despesa", with the odometer only when it was typed (rows without one
+  sort as 0 within the same date). Unpaid fines are left out, and so are due items: they are not
+  spending until paid, and once paid they appear as expenses.
 
 ## Quality gates
 
@@ -547,6 +640,70 @@ outside any composable. Both take a `Localizer`: Android resources in the app,
 
 ## Calculations
 
+### Fuel type is never guessed
+
+Legacy fuel-ups have `fuelType = null` (unknown) and stay that way; vehicles migrated from
+version 5 are flex. A full-to-full interval counts for a fuel group (gasolina = comum, aditivada
+and premium; etanol; diesel) only when the fill that opens it, every partial inside it, the full
+fill before it and the partials before that are all the same group, and no record of the interval
+has an anomaly. The closing fill does not matter: it measures fuel already burned. The first
+interval after a switch is therefore discarded, and so is the first interval ever. Per-fuel
+averages sum km and liters; they never average ratios. Trip cost uses the average of the most
+recent fuel group when it has qualifying intervals, and the overall average otherwise.
+
+### Etanol ou gasolina: personal ratio with a general-rule fallback
+
+`FuelRatio.estimate` compares etanol and gasolina km/L from the vehicle's own intervals ending in
+the last 12 months. It trusts them only with at least 3 intervals and 600 km (car) or 300 km
+(motorcycle) per fuel, and only when the ratio is between 0.60 and 0.85; otherwise it falls back to
+the 70% general rule and says why: not enough data, always alternating (two or more intervals in
+the window discarded only by a switch — "abasteça 2 vezes seguidas com o mesmo combustível") or
+inconsistent data. The advisor always shows which basis it used. Etanol is cheaper when its price
+is below gasolina × ratio, compared unrounded; the threshold is rounded to 3 decimals only for
+display. Cost per km is shown only with the personal ratio. The advisor is hidden for vehicles
+that are not flex.
+
+### No GNV yet
+
+GNV is sold by m³ and lives in a separate cylinder, so it does not fit liters, tank capacity or
+the full-to-full rule. It needs its own model; until then it is not a fuel type.
+
+### Expenses: cash vs accrual
+
+Other expenses have two views. **Cash** (by paid date) feeds monthly spending, "total spent",
+per-category totals and the Profile. **Accrual** feeds cost per km: fixed costs (IPVA,
+licenciamento, seguro) are prorated by days over their coverage — the typed period, or by default
+the calendar year of the date for IPVA and 12 months from the date for the others — and variable
+ones count on their date.
+
+| Category | Fixed | In cost/km | In total spent |
+|---|---|---|---|
+| IPVA, licenciamento, seguro | yes | accrued | yes |
+| Pedágio, estacionamento, lavagem, outros | no | yes | yes |
+| Multa | no | no — shown apart as "evitável" | yes, once paid |
+| Financiamento | no | no — it would double count depreciation | yes |
+| Acessórios | no | no | yes |
+
+`CostSummary.totalCost` (cost/km basis) = fuel + services + accrued expenses; `totalSpent` =
+fuel + services + paid expenses in cash. All-time accrual uses the span of the fuel and service
+records; a `CostPeriod` (for the yearly review) filters by date and interpolates the odometer at
+both ends. An unpaid fine is in neither total.
+
+### An expense odometer is not a reading
+
+The odometer on an expense is optional and informative. It stays out of `Odometer.samples`, so
+the expense form has no odometer validation and an expense never changes the km/month pace,
+forecasts or reminders.
+
+### Fines: points belong to the driver; the 40% discount is mentioned, never advised
+
+Choosing a severity fills the CTB value (leve R$ 88,38 / 3 pts … gravíssima R$ 293,47 / 7 pts)
+less the chosen discount, only while the amount and points are untouched. Points are labelled as
+the driver's and never summed as "your points". The 40% SNE discount shows a caveat that it waives
+the appeal; the app never recommends it. A fine can be logged unpaid (`FineDetails.isPaid`), with
+an "a pagar" badge, out of every total and with reminders from its due date; marking it paid means
+editing it.
+
 ### Money is `BigDecimal`; distance and volume are `Double`
 
 Prices and totals never go through floating-point arithmetic. `Double.toDecimal()` converts
@@ -575,7 +732,53 @@ dates, so tests pin `ZoneOffset.UTC` the way the iOS tests pin a UTC calendar.
 
 A reading that goes backwards is bad data; returning the maximum would hide it.
 
+## Documents and due dates
+
+### Due dates are entered by the user; no built-in state calendar
+
+IPVA and licenciamento calendars change every year and per state; a wrong date is worse than
+none. The form shows "Final da placa N — consulte o calendário da Sefaz/Detran (UF)" with the
+plate's last digit and the vehicle's UF, and the user types the date.
+
+### IPVA installments are separate items, no parent
+
+Each parcela is its own due item with "1/3"-style numbers. There is no parent record to keep in
+sync; marking one paid affects only that one.
+
+### Marking paid creates an expense with the same id
+
+Paying a vehicle's item (optionally) saves an `Expense` of the same kind with
+`id = dueItem.id`, then the item with `paidAt`, then suggests next year's item (same day + 1
+year, no amount, same installment numbers) for IPVA, licenciamento and seguro.
+
+- **Why the same id:** the expense save is an upsert, so retrying after a failure between the
+  two writes never duplicates it, and the two records are linked without an extra column.
+- **Cost:** the two writes are not one transaction; after such a failure the item still shows
+  unpaid until the retry. Because the ids collide across types, timeline and due-item list keys
+  are prefixed by type (`"expense-…"`, `"due-…"`, `"fuel-…"`, `"service-…"`).
+
+### CNH lives on no vehicle, in the Profile
+
+The driver's license is a due item with `vehicleId = null`, shown in Profile → Motorista. Marking
+it renewed only sets `paidAt`: there is no expense category for it and validity depends on age, so
+no next-year item is suggested. Its reminders mention the automatic renewal for good drivers.
+Saving or paying it syncs reminders, since the Profile is not one of the screens that sync on load.
+
 ## Reminders
+
+### Document and fine reminders: every stage at once, weekly when overdue
+
+Lead times, all at 9:00: IPVA 15, 3 days and the day; licenciamento 30, 7 and the day; seguro 30
+and 7; CNH 60 and 30. An unpaid item then repeats weekly for 4 weeks and stops. Unpaid fines with a
+due date fire 7 days before and on the day. Paid items and items of archived vehicles get none.
+
+- **How:** `ReminderPlan.dueReminders` and `fineReminders` return every future stage, each with a
+  deterministic id `UUID.nameUUIDFromBytes("$recordId:$stage")`. `ServiceReminderSync` plans
+  services, due items and fines in one pass and cancels any pending id it did not plan, so past
+  stages and paid items disappear on the next sync.
+- **Why not one pending notification per item like services:** services re-plan from a moving
+  forecast; these dates are fixed, and scheduling all stages means a reminder still fires if the
+  app is not opened between two of them.
 
 ### Reminders are re-planned from scratch on every sync
 
@@ -668,6 +871,64 @@ counted from the last service of that kind (or the vehicle's creation).
 
 ## Presentation
 
+### Retrospectiva per vehicle per year
+
+A "Retrospectiva" screen (detail overflow menu) summarizes one calendar year of a vehicle:
+distance, cash spending by category with fines apart, the most expensive month, fuel-ups,
+volume per fuel group, liter-weighted average and lowest price per fuel type, consumption per
+fuel group with the best and worst tank, cost per km and the services done.
+
+- **Distance:** the odometer is interpolated at January 1 and at the next January 1 (local
+  zone) between the nearest forward readings; without a reading on one side the first or last
+  reading inside the year is used and the screen says "desde dd/mm" / "até dd/mm". Readings that
+  go backwards are ignored (`Odometer.forward`, the same filter `interpolated` uses).
+- **Minimums:** at least 90 days covered, 4 fuel-ups in the year, and 2 readings in the year at
+  least 30 days apart. Below that the screen lists what is missing instead of showing numbers
+  that would mislead. Sections without data are hidden.
+- **Consumption** comes only from qualifying intervals (same fuel, no anomaly, not the first
+  after a switch) that end in the year, as Σkm/ΣL. Best and worst ignore intervals under 100 km
+  (car) or 50 km (motorcycle) and need two candidates.
+- **Cost per km** is the accrual figure of `Cost.summary` over the covered window
+  (`CostPeriod(distance.from, distance.until)`), so a full-year IPVA on a car tracked from July
+  only counts July to December.
+- **Availability:** past years with records; the current year from December 15, marked "até
+  agora". No CO₂ estimate (it would need assumptions per fuel we cannot check). A shareable
+  image card is left for later.
+
+### History PDF is the owner's record, not a certificate
+
+"Histórico em PDF" (detail overflow menu) builds a document for selling the vehicle: vehicle
+data, odometer by month, services (date, km, service, workshop, notes), consumption per fuel,
+km per year, fuel-up count and how long the vehicle has been tracked.
+
+- **Disclaimer first, verbatim:** "Histórico informado pelo proprietário no app Rodaro; não
+  verificado. Confira notas fiscais, manual de revisões e débitos no Detran." The words "laudo" and
+  "certificado" are banned from the report strings, and a test checks both languages.
+- **Never included:** expenses (so fines, insurance, IPVA, financing) and any owner data —
+  `VehicleHistories.build` does not even receive them. Costs, the full fuel log and the full plate
+  are opt-in; the plate is masked as `ABC1D**` by default.
+- **"Lançado retroativamente"** marks records whose `createdAt` is more than 30 days after their
+  date. Rows from before phase A have `createdAt` equal to the date and cannot be flagged; a
+  footnote says so. "No app desde" is the vehicle's `createdAt`, never a record's: legacy rows
+  have `createdAt` equal to their date, so a back-dated record would claim years of tracking.
+- **Odometer regressions** are computed over every reading (vehicle sign-up, fuel-ups and
+  services) and listed with date, source and both values.
+- **`PdfDocument`, not a library:** a few tables of text do not justify a dependency.
+  `ReportLayout` paginates a plain block model (rows never split, table headers repeat, a title
+  stays with its next block) and is unit tested with a fake measurer; `PdfReportRenderer` only
+  draws with `StaticLayout` and is the one file left out of coverage.
+- **Sharing:** the file goes to `cacheDir/reports/` behind a `FileProvider`
+  (`${applicationId}.files`) and is shared with `ACTION_SEND`; "Salvar" uses SAF `CreateDocument`.
+  Older reports are deleted on each export and by `clearLocalData`, because they hold personal
+  history.
+
+### FIPE and ANP values show only in reais
+
+Both sources are in BRL and the app never converts currencies ("Currency changes the format,
+never the value"). With any other currency preference — or, with none set, a locale whose
+currency is not BRL — the FIPE card, the purchase fields, the "com depreciação" line and the ANP
+badge and hint are hidden, and no request is made.
+
 ### Route tab starts with saved routes; calculator is a separate screen
 
 The Route tab now opens on a saved-routes list. Starting a new estimate opens a dedicated
@@ -684,6 +945,13 @@ reminder with its status and progress, a km/L chart (two or more intervals) and 
 spending chart (months without records count as zero), then the history with an
 All / Fuel / Services filter. Adding records moved to a bottom bar so it is one tap.
 
+### The vehicle screen re-reads its vehicle on every load
+
+`VehicleDetailViewModel` used to keep the `Vehicle` it was opened with, so an edit was not
+reflected until the screen was reopened. Now capability, UF and kind drive the fuel picker, the
+advisor and the service grid, so `load()` re-reads the vehicle and keeps the current one if it is
+gone.
+
 ### New fuel-ups start with the last price
 
 The price per liter is filled in from the latest fuel-up, with a footer saying so. Most
@@ -691,8 +959,9 @@ fill-ups happen at the same station, so this saves typing; the field stays edita
 
 ### Category colors
 
-Fuel is teal and services indigo everywhere (rows, charts, badges). Status uses green,
-orange and red, so fuel deliberately avoids orange. The values are Apple's system colors, so
+Fuel is teal, services indigo and other expenses brown (`Palette.expense`, Apple's system brown)
+everywhere (rows, charts, badges). Status uses green, orange and red, so fuel and expenses
+deliberately avoid orange. The values are Apple's system colors, so
 both apps look alike.
 
 ### Android: charts are drawn on a Canvas
@@ -724,7 +993,9 @@ ViewModel that performs a user action takes an `analytics: Analytics` parameter 
   `timeline_entry_deleted`, `route_calculated`/`route_vehicle_selected`,
   `route_distance_looked_up`/`route_saved`/`route_deleted`,
   `preference_changed`, `auth_signed_in`/`auth_account_created`, `account_signed_out`,
-  `account_deleted`, `backup_exported`, `backup_spreadsheet_exported`, `backup_imported`.
+  `account_deleted`, `backup_exported`, `backup_spreadsheet_exported`, `backup_imported`,
+  `fipe_vehicle_selected` (`kind`), `year_review_viewed` (`year_offset`, how many years back) and
+  `history_pdf_shared`/`history_pdf_saved` (the three toggles as `"true"`/`"false"`).
   Failed backups log `backup_export_failed`/`backup_import_failed` with a `reason` from a
   closed set (`unreadable`, `newer_format`, `invalid`, `too_large`, `storage`) and no user data. Parameters stay small (`mode`, `kind`, `round_trip`, the changed
   preference `key`) and never carry values, odometer readings, e-mail or the typed places,
@@ -733,6 +1004,102 @@ ViewModel that performs a user action takes an `analytics: Analytics` parameter 
   rules forbid `data` types in `presentation`), and the no-op default keeps unit tests free of
   a mocking framework. Events are emitted only on the success path, so a failed save is not
   counted as an action.
+
+## Network data
+
+### Network calls never block the detail screen
+
+`VehicleDetailViewModel.load()` reads only Room. The screen then launches, in parallel,
+`refreshValuation()` (FIPE) and `loadRegionalPrices()` (ANP). Their failures are soft: the last
+stored value stays on screen with its reference month ("sem conexão — último valor de …"), a
+retry is offered, and nothing else on the screen changes. Both stop with the screen, which is
+fine because each write is a single upsert. A failed FIPE refresh waits an hour per vehicle
+(in-memory `RefreshBackoff`) before trying again on its own; "Tentar de novo" skips the wait.
+Editing the vehicle to another FIPE choice refreshes it right away.
+
+### `RemoteDataError` is shared by FIPE and ANP
+
+One Domain error (`NetworkUnavailable`, `QuotaExceeded`, `NotFound`, `Unreadable`,
+`RequestFailed`) and one Data helper, `remote {}`, which maps HTTP 404/429, I/O and parse
+failures and always rethrows cancellation (checking `ensureActive()` before calling an I/O error a
+network problem). `RouteLookupError` stays separate: its cases are about API keys and places. Both
+clients use `PublicHttp` (20 s timeouts, `User-Agent: Rodaro-Android/<version>`, request log only
+in debug builds) and send no personal data.
+
+### FIPE value comes from the free parallelum API v2, without a token
+
+The vehicle form can link a vehicle to the FIPE table (brand → searchable model → year/fuel);
+the detail screen then shows the current FIPE value, the purchase price against it and the
+depreciation.
+
+- **API:** `https://fipe.parallelum.com.br/api/v2/{cars|motorcycles}/brands/{b}/models/{m}/years/{y}`
+  (verified against the OpenAPI and live calls on 2026-11-11). Lists are `[{code, name}]`; the
+  price detail is `{price: "R$ 85.386,00", brand, model, modelYear, fuel, codeFipe,
+  referenceMonth: "novembro de 2026"}`; `/{type}/{codeFipe}/years/{y}/history` adds
+  `priceHistory`. Errors are `{"error": "…"}` with 404/429. Picking a year costs one detail
+  request, which is also the first price.
+- **No token:** a token inside the APK would pool every user's quota (1,000/day for a free
+  token). Without one each device has its own 500/day and 50/min, far above our use.
+- **History:** the free tier only answers about the last three reference months
+  (`?reference` older than that and the long `/history` are paid). So the app keeps its own
+  monthly prices in the `fipe_quotes` table and asks at most once per vehicle per month:
+  history the first time, then the latest price only when the newest stored reference month is
+  older than the current month and nothing was fetched this month. Quote ids are derived from
+  vehicle, code, year and month, so a re-fetch is an idempotent upsert.
+- **Caching:** brand, model and year lists are cached by OkHttp in `cacheDir/http/fipe` (the
+  server sends `max-age` of 24 days); price calls send `Cache-Control: no-cache`.
+  `clearLocalData` evicts that cache.
+- **Cost:** a vehicle bought more than about three months ago starts its depreciation at the
+  first price the app saw, and the card says so ("desde ref. X, primeiro valor obtido").
+  parallelum is an unofficial service run by one maintainer; if it disappears, the card keeps the
+  last stored value. A paid token would unlock a year of history behind the same `FipeCatalog`
+  interface.
+
+### Depreciation is not spending
+
+Depreciation = FIPE at the start month − latest FIPE. The start month is the purchase month, or
+the month of the first odometer reading; the start quote is the earliest stored quote on or after
+it (else the latest). It can be negative (valorização) and is never clamped. Per month and per km
+appear only after 3 months and 1,000 km (kilometers interpolated at both month starts).
+
+- It is a separate line, "Depreciação (não é gasto)": inside the ownership cost, never inside
+  "total gasto". `CostSummary.totalCost` and `costPerKilometer` keep their phase A meaning (the
+  running cost); `ownershipCost` adds the depreciation and `ownershipCostPerKilometer` adds the
+  depreciation per km to the running cost per km, shown as "Custo por km com depreciação".
+- **Cost:** the two rates come from different windows (all records vs. FIPE months). Folding
+  depreciation into `totalCost` would have distorted cost per km whenever they differ.
+
+### ANP averages are published by our own weekly job
+
+ANP has no API; it publishes a weekly "resumo semanal" spreadsheet per state on gov.br.
+
+- **Pipeline:** `scripts/anp_prices.py` (stdlib only) scrapes the listing page for
+  `resumo_semanal…xlsx` links — the file names are irregular, so the week is read from the cells,
+  never from the name — reads the `ESTADOS` sheet by header names (found on whichever row has
+  them), keeps gasolina comum and aditivada, etanol hidratado, diesel S10 and diesel S500 in R$/l,
+  maps state names to UFs and rounds mean and standard deviation to 3 decimals.
+- **Published, not committed:** `.github/workflows/anp-prices.yml` (Tuesdays and Fridays, plus
+  `workflow_dispatch`) downloads the currently published `precos-uf.json`, merges the newest
+  weeks into it (52 kept, newest first, one week per line) and deploys Firebase Hosting with a
+  Hosting-only service account. Only a 404 for the published file means "nothing yet" and
+  triggers a 52-week backfill; any other failure stops without deploying. A byte-identical result
+  is not deployed. `hosting/public/anp/` is gitignored, and `make hosting-deploy` rebuilds it
+  before any manual deploy so a deploy from a laptop cannot drop or roll back the averages.
+- **Schema v1:** `{format: "rodaro.anp.precos-uf", formatVersion: 1, source, unit: "BRL/L",
+  updatedAt, weeks: [{start, end, states: {UF: {product: {mean, sd?, stations?}}}}]}`. Readers
+  ignore unknown products, so adding `gnv` later is compatible; `formatVersion` grows only for a
+  breaking change.
+- **App:** `CachedRegionalPriceSource` fetches at most once a day (cache in `filesDir/anp`, not
+  `cacheDir`, so an offline user keeps it), keeps the stale copy on any failure and does not
+  retry within a day in the same process.
+- **Comparison:** the fill price per liter (3 decimals) against the UF average of the same
+  product for the Sunday–Saturday week of the fill; if that week or product is missing, the
+  week right before it, flagged "(semana anterior)" — never older. "Na média" is within ±1 SD,
+  or ±2% of the mean without an SD. Nothing is compared for premium gasoline (not surveyed), an
+  unknown fuel type, a vehicle without a UF (the form asks for it), fills more than 52 weeks
+  older than the newest week, or a non-BRL currency. Attribution "Fonte: ANP/LPC".
+- **Cost:** gov.br may block GitHub runner IPs (it already answers 403 to HEAD); the job then
+  fails loudly and the app keeps the last published weeks.
 
 ## Routes and networking
 

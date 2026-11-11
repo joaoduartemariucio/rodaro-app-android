@@ -43,6 +43,15 @@ fun ServiceEntryRow(entry: ServiceEntry) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            entry.workshop?.let { workshop ->
+                Text(
+                    workshop,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             if (entry.notes.isNotEmpty()) {
                 Text(
                     entry.notes,

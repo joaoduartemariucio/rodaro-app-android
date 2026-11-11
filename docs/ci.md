@@ -23,6 +23,7 @@ The two jobs run in parallel. A newer push to the same branch cancels the run in
 |---|---|---|
 | **Lint** | `make lint` | a layer rule is broken, or Android Lint reports anything (warnings are errors) |
 | **Format** | `make format-check` | any file differs from what ktlint would produce |
+| **Script tests** | `make scripts-test` | a Python unit test in `scripts/test_*.py` fails (the ANP pipeline) |
 | **Build** | `make build` | the app or the unit tests do not compile |
 | **Test** | `make test` | any unit test fails |
 | **Coverage** | `make coverage` | less than **80%** of the changed executable lines are covered by tests |
@@ -113,6 +114,9 @@ make ci
 | `make format-check` | fails if anything would be reformatted |
 | `make build` | builds the app and the unit tests |
 | `make test` | runs the unit tests with coverage |
+| `make scripts-test` | runs the Python script tests (stdlib `unittest`) |
+| `make hosting-deploy` | rebuilds `hosting/public/anp/precos-uf.json` from the published copy, then `firebase deploy --only hosting`; stops without deploying if the rebuild fails |
+| `make hosting-deploy-keep-anp` | downloads the published `precos-uf.json` unchanged, then deploys; for when gov.br is down |
 | `make coverage` | checks changed lines against `origin/main`; `BASE=<ref>` or `MIN_COVERAGE=<n>` to override |
 | `make clean` | removes build output |
 
@@ -159,3 +163,49 @@ so a failed build burns no version. Release notes are the commit subjects since 
 Without `FIREBASE_SERVICE_ACCOUNT` or `PLAY_SERVICE_ACCOUNT` that step is skipped with a
 warning, so the run still produces the files. Google Play only accepts uploads through the API
 after the first bundle of the app has been uploaded by hand in the Play Console.
+
+## ANP prices
+
+[`.github/workflows/anp-prices.yml`](../.github/workflows/anp-prices.yml) publishes the ANP
+state averages the app compares fuel prices with. It never commits: `hosting/public/anp/` is
+gitignored and the JSON only lives on Firebase Hosting.
+
+| When | What |
+|---|---|
+| Tuesdays and Fridays, 13:00 UTC | download the newest 3 weekly summaries (absorbs a late upload) |
+| `workflow_dispatch` | same, with the `weeks` input to fetch more |
+| first run (published JSON answers 404) | backfill the last 52 weeks on its own |
+
+```mermaid
+graph LR
+    Tests["make scripts-test"] --> Build["anp_prices.py: published JSON + newest summaries"]
+    Build -->|changed| Deploy["firebase deploy --only hosting"]
+    Build -->|identical or failed| Stop["no deploy"]
+```
+
+The script exits with an error, and nothing is deployed, when the published JSON cannot be read
+(anything but a 404), a spreadsheet has an unexpected layout, or a week fails the sanity check
+(gasolina comum in at least 20 states, every mean between R$ 1 and R$ 20). The deploy step only
+runs on `main`.
+
+| Secret | Used for |
+|---|---|
+| `FIREBASE_HOSTING_SERVICE_ACCOUNT` | JSON key of a service account with only the **Firebase Hosting Admin** role on project `rodaro` |
+
+Create it in the Google Cloud console (IAM → Service accounts → create, grant "Firebase Hosting
+Admin", Keys → add JSON key) and store it with `gh secret set FIREBASE_HOSTING_SERVICE_ACCOUNT <
+key.json`. Without it the job still builds and tests the JSON, then logs a `::warning::` and
+skips the deploy. The key is written to `$RUNNER_TEMP` only for the deploy step and deleted at the
+end of the job. That Hosting Admin alone is enough for `firebase deploy --only hosting` is
+expected but **unverified until the first run**; if the deploy is refused, add "Service Usage
+Consumer" (or "API Keys Viewer") to the same account.
+
+Manual deploys of the site (privacy page, `app-ads.txt`) must use `make hosting-deploy`, which
+rebuilds the ANP JSON first; a bare `firebase deploy` would publish the site without it. If the
+rebuild fails — gov.br down or blocking, a layout change, a week that fails the sanity check —
+`make` stops before `firebase deploy` and nothing is published. To ship a site change anyway, run
+`make hosting-deploy-keep-anp`: it downloads the live `precos-uf.json` byte for byte (failing if
+it cannot, so the averages are never dropped) and deploys it with the rest of the site; the
+weekly job adds the new weeks later. Before the first ANP publication (live JSON is a 404) there
+is nothing to keep, so use `make hosting-deploy` or run the workflow first.
+

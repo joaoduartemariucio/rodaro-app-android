@@ -1,12 +1,17 @@
 package br.com.joaoduartemariucio.rodaro.presentation.common
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -66,6 +71,39 @@ fun DateField(
             dismissButton = { TextButton(onClick = { isPicking = false }) { Text(stringResource(R.string.cancel)) } },
         ) {
             DatePicker(state = state)
+        }
+    }
+}
+
+@Composable
+fun DateField(
+    title: String,
+    date: LocalDate,
+    onDateChange: (LocalDate) -> Unit,
+    zone: ZoneId = ZoneId.systemDefault(),
+) {
+    DateField(title, date.atStartOfDay(zone).toInstant(), { onDateChange(it.atZone(zone).toLocalDate()) }, zone)
+}
+
+@Composable
+fun OptionalDateField(
+    title: String,
+    date: LocalDate?,
+    onDateChange: (LocalDate?) -> Unit,
+    today: LocalDate,
+    zone: ZoneId = ZoneId.systemDefault(),
+) {
+    if (date == null) {
+        Row(Modifier.fillMaxWidth().heightIn(min = 44.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            TextButton(onClick = { onDateChange(today) }) { Text(stringResource(R.string.date_set)) }
+        }
+    } else {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.weight(1f)) { DateField(title, date, { onDateChange(it) }, zone) }
+            IconButton(onClick = { onDateChange(null) }) {
+                Icon(Icons.Filled.Clear, contentDescription = stringResource(R.string.date_clear))
+            }
         }
     }
 }

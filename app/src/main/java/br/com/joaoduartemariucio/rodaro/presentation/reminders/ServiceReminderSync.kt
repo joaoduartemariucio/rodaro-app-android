@@ -3,14 +3,22 @@ package br.com.joaoduartemariucio.rodaro.presentation.reminders
 import android.util.Log
 import br.com.joaoduartemariucio.rodaro.R
 import br.com.joaoduartemariucio.rodaro.domain.common.services.DateProvider
+import br.com.joaoduartemariucio.rodaro.domain.costs.entities.ExpenseCategory
+import br.com.joaoduartemariucio.rodaro.domain.costs.repositories.ExpenseRepository
+import br.com.joaoduartemariucio.rodaro.domain.dues.calculations.DueStage
+import br.com.joaoduartemariucio.rodaro.domain.dues.entities.DueKind
+import br.com.joaoduartemariucio.rodaro.domain.dues.repositories.DueItemRepository
 import br.com.joaoduartemariucio.rodaro.domain.fueling.repositories.FuelEntryRepository
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.calculations.MaintenanceForecast
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.repositories.ServiceRepository
 import br.com.joaoduartemariucio.rodaro.domain.preferences.repositories.PreferencesRepository
+import br.com.joaoduartemariucio.rodaro.domain.reminders.calculations.PlannedDueReminder
+import br.com.joaoduartemariucio.rodaro.domain.reminders.calculations.PlannedFineReminder
 import br.com.joaoduartemariucio.rodaro.domain.reminders.calculations.PlannedReminder
 import br.com.joaoduartemariucio.rodaro.domain.reminders.calculations.ReminderPlan
 import br.com.joaoduartemariucio.rodaro.domain.reminders.services.Reminder
 import br.com.joaoduartemariucio.rodaro.domain.reminders.services.ReminderScheduler
+import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.Vehicle
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.VehicleRecords
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.repositories.VehicleRepository
 import br.com.joaoduartemariucio.rodaro.presentation.common.Localizer
@@ -23,6 +31,8 @@ class ServiceReminderSync(
     private val vehicleRepository: VehicleRepository,
     private val fuelEntryRepository: FuelEntryRepository,
     private val serviceRepository: ServiceRepository,
+    private val dueItemRepository: DueItemRepository,
+    private val expenseRepository: ExpenseRepository,
     private val scheduler: ReminderScheduler,
     private val dateProvider: DateProvider,
     private val localizer: Localizer,
@@ -35,26 +45,32 @@ class ServiceReminderSync(
                 return
             }
 
-            val planned = ReminderPlan.reminders(records(), dateProvider.now, dateProvider.zone)
+            val now = dateProvider.now
+            val zone = dateProvider.zone
+            val vehicles = vehicleRepository.all(includingArchived = false)
+            val planned = ReminderPlan.reminders(records(vehicles), now, zone)
+            val dues = ReminderPlan.dueReminders(dueItemRepository.all(), vehicles, now, zone)
+            val fines = ReminderPlan.fineReminders(vehicles.flatMap { expenseRepository.expenses(it.id) }, vehicles, now, zone)
+            val reminders = planned.map(::reminder) + dues.map(::reminder) + fines.map(::reminder)
 
-            val wanted = planned.map { it.id }.toSet()
+            val wanted = reminders.map { it.id }.toSet()
             for (id in scheduler.pendingIdentifiers()) {
                 if (id !in wanted) scheduler.cancel(id)
             }
 
-            if (planned.isEmpty() || !scheduler.requestAuthorization()) return
-            for (reminder in planned) {
-                scheduler.schedule(reminder(reminder))
+            if (reminders.isEmpty() || !scheduler.requestAuthorization()) return
+            for (reminder in reminders) {
+                scheduler.schedule(reminder)
             }
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
-            Log.e(TAG, "Could not sync service reminders", error)
+            Log.e(TAG, "Could not sync reminders", error)
         }
     }
 
-    private suspend fun records(): List<VehicleRecords> =
-        vehicleRepository.all(includingArchived = false).map { vehicle ->
+    private suspend fun records(vehicles: List<Vehicle>): List<VehicleRecords> =
+        vehicles.map { vehicle ->
             VehicleRecords(
                 vehicle = vehicle,
                 fuel = fuelEntryRepository.entries(vehicle.id),
@@ -104,6 +120,52 @@ class ServiceReminderSync(
             id = planned.id,
             title = "${planned.vehicle.name}: ${localizer.string(planned.due.rule.kind.label)}",
             body = body,
+            fireDate = planned.fireDate,
+        )
+    }
+
+    fun reminder(planned: PlannedDueReminder): Reminder {
+        val item = planned.item
+        val zone = dateProvider.zone
+        val dueDate =
+            item.dueDate
+                .atStartOfDay(zone)
+                .toInstant()
+                .formattedFullDate(zone)
+        val installment =
+            item.installmentNumber?.let { number -> item.installmentCount?.let { count -> " $number/$count" } }.orEmpty()
+        val kind = localizer.string(item.kind.label) + installment
+        val body =
+            when (val stage = planned.stage) {
+                is DueStage.DaysBefore -> localizer.plural(R.plurals.reminder_due_in_days, stage.days, stage.days, dueDate)
+                DueStage.DueToday -> localizer.string(R.string.reminder_due_today)
+                is DueStage.Overdue -> localizer.string(R.string.reminder_due_overdue_since, dueDate)
+            }
+        val vehicle = planned.vehicle
+        return Reminder(
+            id = planned.id,
+            title = if (vehicle == null) kind else "${vehicle.name}: $kind",
+            body = if (item.kind == DueKind.CNH) "$body ${localizer.string(R.string.reminder_cnh_note)}" else body,
+            fireDate = planned.fireDate,
+        )
+    }
+
+    fun reminder(planned: PlannedFineReminder): Reminder {
+        val zone = dateProvider.zone
+        val dueDate =
+            planned.dueDate
+                .atStartOfDay(zone)
+                .toInstant()
+                .formattedFullDate(zone)
+        return Reminder(
+            id = planned.id,
+            title = "${planned.vehicle.name}: ${localizer.string(ExpenseCategory.MULTA.label)}",
+            body =
+                if (planned.stage == DueStage.DueToday) {
+                    localizer.string(R.string.reminder_fine_due_today)
+                } else {
+                    localizer.string(R.string.reminder_fine_due, dueDate)
+                },
             fireDate = planned.fireDate,
         )
     }

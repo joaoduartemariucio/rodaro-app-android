@@ -6,6 +6,7 @@ import br.com.joaoduartemariucio.rodaro.presentation.common.navigation.Route
 import br.com.joaoduartemariucio.rodaro.presentation.vehicles.detail.VehicleDetailScreen
 import br.com.joaoduartemariucio.rodaro.presentation.vehicles.list.VehicleListScreen
 import br.com.joaoduartemariucio.rodaro.presentation.vehicles.list.VehicleListViewModel
+import br.com.joaoduartemariucio.rodaro.presentation.vehicles.review.YearReviewScreen
 
 fun EntryProviderScope<Route>.vehiclesEntries(navigator: Navigator) {
     entry<VehiclesRoute.VehicleList> {
@@ -21,6 +22,13 @@ fun EntryProviderScope<Route>.vehiclesEntries(navigator: Navigator) {
         )
     }
     entry<VehiclesRoute.VehicleDetail> { route ->
-        VehicleDetailScreen(vehicle = route.vehicle, onBack = navigator::back)
+        VehicleDetailScreen(
+            vehicle = route.vehicle,
+            onBack = navigator::back,
+            onOpenYearReview = { navigator.open(VehiclesRoute.YearReview(it)) },
+        )
+    }
+    entry<VehiclesRoute.YearReview> { route ->
+        YearReviewScreen(vehicle = route.vehicle, onBack = navigator::back)
     }
 }

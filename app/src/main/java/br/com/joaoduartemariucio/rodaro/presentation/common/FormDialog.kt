@@ -40,6 +40,7 @@ fun FormDialog(
     canSave: Boolean,
     onSave: () -> Unit,
     onCancel: () -> Unit,
+    saveLabel: String = stringResource(R.string.save),
     content: LazyListScope.() -> Unit,
 ) {
     Dialog(
@@ -67,7 +68,7 @@ fun FormDialog(
                             CircularProgressIndicator(Modifier.padding(horizontal = 16.dp).size(20.dp), strokeWidth = 2.dp)
                         } else {
                             TextButton(onClick = onSave, enabled = canSave) {
-                                Text(stringResource(R.string.save), fontWeight = FontWeight.SemiBold)
+                                Text(saveLabel, fontWeight = FontWeight.SemiBold)
                             }
                         }
                     },

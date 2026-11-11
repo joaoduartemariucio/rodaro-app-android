@@ -1,5 +1,7 @@
 package br.com.joaoduartemariucio.rodaro.domain.backup.entities
 
+import br.com.joaoduartemariucio.rodaro.domain.costs.entities.Expense
+import br.com.joaoduartemariucio.rodaro.domain.dues.entities.DueItem
 import br.com.joaoduartemariucio.rodaro.domain.fueling.entities.FuelEntry
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.entities.ServiceEntry
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.entities.ServiceRule
@@ -8,6 +10,7 @@ import br.com.joaoduartemariucio.rodaro.domain.preferences.entities.LanguageOpti
 import br.com.joaoduartemariucio.rodaro.domain.preferences.entities.Preferences
 import br.com.joaoduartemariucio.rodaro.domain.preferences.entities.UnitSystem
 import br.com.joaoduartemariucio.rodaro.domain.trips.entities.SavedRoute
+import br.com.joaoduartemariucio.rodaro.domain.valuation.entities.FipeQuote
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.Vehicle
 import java.time.Instant
 
@@ -17,6 +20,9 @@ data class BackupSnapshot(
     val serviceEntries: List<ServiceEntry> = emptyList(),
     val serviceRules: List<ServiceRule> = emptyList(),
     val savedRoutes: List<SavedRoute> = emptyList(),
+    val expenses: List<Expense> = emptyList(),
+    val dueItems: List<DueItem> = emptyList(),
+    val fipeQuotes: List<FipeQuote> = emptyList(),
     val preferences: PortablePreferences? = null,
     val exportedAt: Instant? = null,
 ) {
@@ -28,6 +34,8 @@ data class BackupSnapshot(
                 serviceEntries = serviceEntries.size,
                 serviceRules = serviceRules.size,
                 savedRoutes = savedRoutes.size,
+                expenses = expenses.size,
+                dueItems = dueItems.size,
             )
 }
 
@@ -37,6 +45,8 @@ data class BackupContents(
     val serviceEntries: Int,
     val serviceRules: Int,
     val savedRoutes: Int,
+    val expenses: Int = 0,
+    val dueItems: Int = 0,
 )
 
 data class PortablePreferences(

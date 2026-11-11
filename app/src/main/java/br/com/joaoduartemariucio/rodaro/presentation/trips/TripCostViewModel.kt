@@ -9,6 +9,7 @@ import br.com.joaoduartemariucio.rodaro.domain.common.entities.sortedChronologic
 import br.com.joaoduartemariucio.rodaro.domain.common.services.Analytics
 import br.com.joaoduartemariucio.rodaro.domain.common.services.DateProvider
 import br.com.joaoduartemariucio.rodaro.domain.fueling.calculations.Consumption
+import br.com.joaoduartemariucio.rodaro.domain.fueling.entities.FuelGroup
 import br.com.joaoduartemariucio.rodaro.domain.fueling.repositories.FuelEntryRepository
 import br.com.joaoduartemariucio.rodaro.domain.trips.calculations.TankPlan
 import br.com.joaoduartemariucio.rodaro.domain.trips.calculations.TripCost
@@ -111,6 +112,8 @@ class TripCostViewModel(
     var suggestedPrice: String? by mutableStateOf(null)
         private set
     var averageConsumptionSamples: Int by mutableStateOf(0)
+        private set
+    var suggestedConsumptionGroup: FuelGroup? by mutableStateOf(null)
         private set
     var lastPriceDate: Instant? by mutableStateOf(null)
         private set
@@ -370,14 +373,20 @@ class TripCostViewModel(
     ) {
         try {
             val fuel = fuelEntryRepository.entries(vehicle.id)
-            val average = Consumption.average(fuel)
+            val intervals = Consumption.intervals(fuel)
+            val group = Consumption.latestGroup(fuel)
+            val groupIntervals = intervals.filter { group != null && it.fuelGroup == group }
+            val groupAverage = Consumption.averageOf(groupIntervals)
+            val used = if (groupAverage != null) groupIntervals else intervals
+            val average = groupAverage ?: Consumption.averageOf(intervals)
             val last = fuel.sortedChronologically().lastOrNull()
             applySuggestions(
                 consumption = average?.let { NumberInput.text(UnitConversion.consumption(it), NumberInput.Style.CONSUMPTION) },
                 price = last?.pricePerLiter?.let { NumberInput.text(UnitConversion.perVolume(it), NumberInput.Style.FUEL_PRICE) },
                 overwrite = overwrite,
             )
-            averageConsumptionSamples = if (average == null) 0 else Consumption.intervals(fuel).size
+            averageConsumptionSamples = if (average == null) 0 else used.size
+            suggestedConsumptionGroup = if (groupAverage != null) group else null
             lastPriceDate = last?.date
         } catch (error: CancellationException) {
             throw error
@@ -400,6 +409,7 @@ class TripCostViewModel(
     private fun clearSuggestions() {
         applySuggestions(consumption = null, price = null)
         averageConsumptionSamples = 0
+        suggestedConsumptionGroup = null
         lastPriceDate = null
         selectedVehicle = null
     }

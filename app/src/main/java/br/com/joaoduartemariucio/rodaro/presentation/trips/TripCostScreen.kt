@@ -96,6 +96,7 @@ import br.com.joaoduartemariucio.rodaro.presentation.common.formattedKilometers
 import br.com.joaoduartemariucio.rodaro.presentation.common.formattedLiters
 import br.com.joaoduartemariucio.rodaro.presentation.common.formattedPerKilometer
 import br.com.joaoduartemariucio.rodaro.presentation.common.icon
+import br.com.joaoduartemariucio.rodaro.presentation.common.label
 import br.com.joaoduartemariucio.rodaro.presentation.common.message
 import br.com.joaoduartemariucio.rodaro.presentation.common.perDistanceTitle
 import br.com.joaoduartemariucio.rodaro.presentation.common.rememberLocalizer
@@ -477,13 +478,23 @@ private fun ConsumptionSource(viewModel: TripCostViewModel) {
     val suggested = viewModel.suggestedConsumption
     when {
         viewModel.isUsingAverageConsumption -> {
+            val group = viewModel.suggestedConsumptionGroup
             SourceNote(
                 text =
-                    pluralStringResource(
-                        R.plurals.consumption_history_basis,
-                        viewModel.averageConsumptionSamples,
-                        viewModel.averageConsumptionSamples,
-                    ),
+                    if (group == null) {
+                        pluralStringResource(
+                            R.plurals.consumption_history_basis,
+                            viewModel.averageConsumptionSamples,
+                            viewModel.averageConsumptionSamples,
+                        )
+                    } else {
+                        pluralStringResource(
+                            R.plurals.consumption_history_basis_group,
+                            viewModel.averageConsumptionSamples,
+                            viewModel.averageConsumptionSamples,
+                            stringResource(group.label),
+                        )
+                    },
                 icon = Icons.Filled.History,
                 tint = Palette.green,
             )

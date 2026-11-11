@@ -32,6 +32,7 @@ import br.com.joaoduartemariucio.rodaro.presentation.common.label
 
 @Composable
 fun ServiceKindGrid(
+    kinds: List<ServiceKind>,
     selection: ServiceKind,
     onSelect: (ServiceKind) -> Unit,
 ) {
@@ -40,7 +41,7 @@ fun ServiceKindGrid(
         val spacing = 8.dp
         val columns = maxOf(1, ((maxWidth + spacing) / (96.dp + spacing)).toInt())
         Column(verticalArrangement = Arrangement.spacedBy(spacing)) {
-            ServiceKind.entries.chunked(columns).forEach { row ->
+            kinds.chunked(columns).forEach { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(spacing)) {
                     row.forEach { kind ->
                         val isSelected = kind == selection

@@ -4,19 +4,33 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import br.com.joaoduartemariucio.rodaro.calculations.assertDecimal
 import br.com.joaoduartemariucio.rodaro.calculations.day
+import br.com.joaoduartemariucio.rodaro.calculations.quote
+import br.com.joaoduartemariucio.rodaro.calculations.selection
 import br.com.joaoduartemariucio.rodaro.data.common.repositories.persisting
+import br.com.joaoduartemariucio.rodaro.data.costs.repositories.RoomExpenseRepository
 import br.com.joaoduartemariucio.rodaro.data.database.RodaroDatabase
+import br.com.joaoduartemariucio.rodaro.data.dues.repositories.RoomDueItemRepository
 import br.com.joaoduartemariucio.rodaro.data.fueling.repositories.RoomFuelEntryRepository
 import br.com.joaoduartemariucio.rodaro.data.maintenance.repositories.RoomServiceRepository
 import br.com.joaoduartemariucio.rodaro.data.trips.repositories.RoomRouteRepository
+import br.com.joaoduartemariucio.rodaro.data.valuation.repositories.RoomFipeQuoteRepository
 import br.com.joaoduartemariucio.rodaro.data.vehicles.repositories.RoomVehicleRepository
 import br.com.joaoduartemariucio.rodaro.domain.common.errors.RepositoryError
+import br.com.joaoduartemariucio.rodaro.domain.costs.entities.Expense
+import br.com.joaoduartemariucio.rodaro.domain.costs.entities.ExpenseCategory
+import br.com.joaoduartemariucio.rodaro.domain.costs.entities.FineDetails
+import br.com.joaoduartemariucio.rodaro.domain.costs.entities.FineDiscount
+import br.com.joaoduartemariucio.rodaro.domain.costs.entities.FineSeverity
+import br.com.joaoduartemariucio.rodaro.domain.dues.entities.DueItem
+import br.com.joaoduartemariucio.rodaro.domain.dues.entities.DueKind
 import br.com.joaoduartemariucio.rodaro.domain.fueling.entities.FuelEntry
+import br.com.joaoduartemariucio.rodaro.domain.fueling.entities.FuelType
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.entities.ServiceEntry
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.entities.ServiceKind
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.entities.ServiceRule
 import br.com.joaoduartemariucio.rodaro.domain.trips.entities.RoutePoint
 import br.com.joaoduartemariucio.rodaro.domain.trips.entities.SavedRoute
+import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.FuelCapability
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.Vehicle
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.VehicleKind
 import kotlinx.coroutines.test.runTest
@@ -25,6 +39,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.math.BigDecimal
+import java.time.LocalDate
+import java.time.YearMonth
 import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -39,6 +55,9 @@ class RoomRepositoriesTests {
     private val fuel = RoomFuelEntryRepository(database.fuelEntries(), database.vehicles())
     private val services = RoomServiceRepository(database.services(), database.vehicles())
     private val routes = RoomRouteRepository(database.tripRoutes())
+    private val expenses = RoomExpenseRepository(database.expenses(), database.vehicles())
+    private val dues = RoomDueItemRepository(database.dueItems(), database.vehicles())
+    private val quotes = RoomFipeQuoteRepository(database.fipeQuotes(), database.vehicles())
 
     private val gol =
         Vehicle(name = "Gol", kind = VehicleKind.CAR, plate = "ABC1D23", initialOdometer = 1_000.0, tankCapacity = 55.0, createdAt = day(0))
@@ -198,6 +217,179 @@ class RoomRepositoriesTests {
 
             routes.delete(earlier.id)
             assertEquals(listOf(later.id), routes.routes().map { it.id })
+        }
+
+    @Test
+    fun `the new vehicle, fuel and service fields round-trip`() =
+        runTest {
+            val diesel = gol.copy(fuelCapability = FuelCapability.DIESEL, uf = "SP", modelYear = 2019)
+            vehicles.save(diesel)
+            val typed = fuelEntry(3, 1_200.0).copy(fuelType = FuelType.DIESEL_S10, createdAt = day(9))
+            fuel.save(typed)
+            val oil =
+                ServiceEntry(
+                    vehicleId = gol.id,
+                    kind = ServiceKind.TIMING_BELT,
+                    date = day(5),
+                    odometer = 1_300.0,
+                    cost = BigDecimal("900"),
+                    workshop = "Oficina do Zé",
+                    createdAt = day(40),
+                )
+            services.save(oil)
+
+            assertEquals(diesel, vehicles.vehicle(gol.id))
+            assertEquals(FuelType.DIESEL_S10, fuel.entries(gol.id).single().fuelType)
+            assertEquals(day(9), fuel.entries(gol.id).single().createdAt)
+            assertEquals(oil, services.entries(gol.id).single())
+        }
+
+    @Test
+    fun `expenses round-trip with exact and negative amounts, fine details and coverage dates`() =
+        runTest {
+            vehicles.save(gol)
+            val insurance =
+                Expense(
+                    vehicleId = gol.id,
+                    category = ExpenseCategory.SEGURO,
+                    date = day(3),
+                    amount = BigDecimal("2450.37"),
+                    odometer = 1_100.0,
+                    note = "Apólice",
+                    coverageStart = LocalDate.of(2001, 1, 4),
+                    coverageEnd = LocalDate.of(2002, 1, 3),
+                )
+            val refund = Expense(vehicleId = gol.id, category = ExpenseCategory.OUTROS, date = day(1), amount = BigDecimal("-35.10"))
+            val fine =
+                Expense(
+                    vehicleId = gol.id,
+                    category = ExpenseCategory.MULTA,
+                    date = day(8),
+                    amount = BigDecimal("156.18"),
+                    fine =
+                        FineDetails(
+                            infractionDate = LocalDate.of(2000, 12, 20),
+                            severity = FineSeverity.GRAVE,
+                            points = 5,
+                            dueDate = LocalDate.of(2001, 2, 1),
+                            discount = FineDiscount.TWENTY,
+                            isPaid = false,
+                        ),
+                )
+            val tollWithStrayFine = Expense(vehicleId = gol.id, category = ExpenseCategory.PEDAGIO, date = day(9), amount = BigDecimal("12.40"), fine = FineDetails())
+            expenses.save(insurance)
+            expenses.save(refund)
+            expenses.save(fine)
+            expenses.save(tollWithStrayFine)
+
+            val saved = expenses.expenses(gol.id)
+            assertEquals(listOf(refund, insurance, fine, tollWithStrayFine.copy(fine = null)), saved)
+            assertDecimal("-35.10", saved.first().amount)
+
+            expenses.save(refund.copy(vehicleId = UUID.randomUUID(), note = "Estorno"))
+            assertEquals(gol.id, expenses.expenses(gol.id).first().vehicleId)
+
+            expenses.delete(refund.id)
+            assertEquals(3, expenses.expenses(gol.id).size)
+        }
+
+    @Test
+    fun `an expense needs an existing vehicle and deleting a missing one fails`() =
+        runTest {
+            val orphan = Expense(vehicleId = UUID.randomUUID(), category = ExpenseCategory.LAVAGEM, date = day(1), amount = BigDecimal.TEN)
+
+            assertIs<RepositoryError.VehicleNotFound>(assertFailsWith<RepositoryError> { expenses.save(orphan) })
+            assertIs<RepositoryError.EntryNotFound>(assertFailsWith<RepositoryError> { expenses.delete(UUID.randomUUID()) })
+        }
+
+    @Test
+    fun `due items round-trip, driver items have no vehicle and deleting a missing one fails`() =
+        runTest {
+            vehicles.save(gol)
+            val ipva =
+                DueItem(
+                    vehicleId = gol.id,
+                    kind = DueKind.IPVA,
+                    dueDate = LocalDate.of(2001, 3, 10),
+                    amount = BigDecimal("812.45"),
+                    installmentNumber = 1,
+                    installmentCount = 3,
+                    note = "Cota 1",
+                    createdAt = day(0),
+                )
+            val license = DueItem(vehicleId = null, kind = DueKind.CNH, dueDate = LocalDate.of(2003, 7, 1), paidAt = day(4), createdAt = day(1))
+            dues.save(license)
+            dues.save(ipva)
+
+            assertEquals(listOf(ipva), dues.items(gol.id))
+            assertEquals(listOf(license), dues.driverItems())
+            assertEquals(listOf(ipva, license), dues.all())
+
+            dues.delete(ipva.id)
+            assertEquals(listOf(license), dues.all())
+            assertIs<RepositoryError.EntryNotFound>(assertFailsWith<RepositoryError> { dues.delete(ipva.id) })
+            assertIs<RepositoryError.VehicleNotFound>(assertFailsWith<RepositoryError> { dues.save(ipva.copy(vehicleId = UUID.randomUUID())) })
+        }
+
+    @Test
+    fun `deleting a vehicle removes its expenses and due items but keeps the driver license`() =
+        runTest {
+            vehicles.save(gol)
+            expenses.save(Expense(vehicleId = gol.id, category = ExpenseCategory.LAVAGEM, date = day(1), amount = BigDecimal.TEN))
+            dues.save(DueItem(vehicleId = gol.id, kind = DueKind.SEGURO, dueDate = LocalDate.of(2001, 5, 1), createdAt = day(0)))
+            val license = DueItem(vehicleId = null, kind = DueKind.CNH, dueDate = LocalDate.of(2003, 7, 1), createdAt = day(1))
+            dues.save(license)
+
+            database.openHelper.writableDatabase.execSQL("DELETE FROM vehicles WHERE id = '${gol.id}'")
+
+            assertTrue(expenses.expenses(gol.id).isEmpty())
+            assertTrue(dues.items(gol.id).isEmpty())
+            assertEquals(listOf(license), dues.all())
+        }
+
+    @Test
+    fun `FIPE selection and purchase fields round-trip with an exact price`() =
+        runTest {
+            val bought = gol.copy(fipe = selection(), purchaseDate = LocalDate.of(2026, 3, 14), purchasePrice = BigDecimal("92500.50"))
+            vehicles.save(bought)
+
+            val stored = vehicles.vehicle(gol.id)
+
+            assertEquals(bought, stored)
+            assertEquals("92500.50", stored?.purchasePrice?.toPlainString())
+            vehicles.save(bought.copy(fipe = null, purchaseDate = null, purchasePrice = null))
+            assertNull(vehicles.vehicle(gol.id)?.fipe)
+        }
+
+    @Test
+    fun `FIPE quotes upsert by id, sort by month and need their vehicle`() =
+        runTest {
+            vehicles.save(gol)
+            val november = quote(YearMonth.of(2026, 11), "85386.00", vehicleId = gol.id)
+            val october = quote(YearMonth.of(2026, 10), "86000.00", vehicleId = gol.id)
+            quotes.save(listOf(november, october))
+            quotes.save(listOf(november.copy(price = BigDecimal("85000.10"), fetchedAt = day(3))))
+
+            val stored = quotes.quotes(gol.id)
+
+            assertEquals(listOf(YearMonth.of(2026, 10), YearMonth.of(2026, 11)), stored.map { it.month })
+            assertEquals("85000.10", stored.last().price.toPlainString())
+            assertEquals(day(3), stored.last().fetchedAt)
+            val missing = UUID.randomUUID()
+            assertIs<RepositoryError.VehicleNotFound>(
+                assertFailsWith<RepositoryError> { quotes.save(listOf(quote(YearMonth.of(2026, 1), "1", vehicleId = missing))) },
+            )
+        }
+
+    @Test
+    fun `deleting a vehicle removes its FIPE quotes`() =
+        runTest {
+            vehicles.save(gol)
+            quotes.save(listOf(quote(YearMonth.of(2026, 11), "85386.00", vehicleId = gol.id)))
+
+            database.openHelper.writableDatabase.execSQL("DELETE FROM vehicles WHERE id = '${gol.id}'")
+
+            assertTrue(quotes.quotes(gol.id).isEmpty())
         }
 
     private fun savedRoute(

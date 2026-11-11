@@ -13,4 +13,6 @@ data class ServiceEntry(
     override val odometer: Double,
     val cost: BigDecimal,
     val notes: String = "",
+    val workshop: String? = null,
+    val createdAt: Instant = date,
 ) : Chronological

@@ -43,27 +43,59 @@ graph LR
 ## Domain
 
 Plain data classes and pure functions with no Android dependency, grouped by feature:
-`vehicles/`, `fueling/`, `maintenance/`, `costs/`, `reminders/`, and `common/` for what every
-feature uses (calendar math, decimals, chronology, `DateProvider`, `RepositoryError`). Inside
+`vehicles/`, `fueling/`, `maintenance/`, `costs/`, `dues/`, `reminders/`, `valuation/` (FIPE),
+`reports/` (Retrospectiva and history PDF), and `common/` for what every feature uses (calendar
+math, decimals, chronology, `DateProvider`, `RepositoryError`, `RemoteDataError`). Inside
 each feature the usual folders: `entities/`, `repositories/` (interfaces), `calculations/`,
 `services/` (interfaces) and `errors/`, only the ones it needs.
 
-- **Entities** — `Vehicle`, `FuelEntry`, `ServiceEntry`, `ServiceRule`, `OdometerSample`.
+- **Entities** — `Vehicle` (with `FuelCapability`, UF and model year), `FuelEntry` (with
+  `FuelType`/`FuelGroup` and `createdAt`), `ServiceEntry` (with workshop and `createdAt`),
+  `ServiceRule`, `OdometerSample`, `Expense` (`ExpenseCategory`, `FineDetails`) in `costs/` and
+  `DueItem` (`DueKind`: IPVA, licenciamento, seguro, CNH) in `dues/`, `FipeSelection` and
+  `FipeQuote` (one stored FIPE price per vehicle and reference month) in `valuation/`, and the
+  ANP `RegionalPriceTable` (state averages per week and fuel type) in `fueling/`. A vehicle may
+  carry a FIPE selection, a purchase date and a purchase price.
 - **Calculations** — one object per concern, each with its own tests:
-  - `Consumption` — km/L per interval between two full tanks, plus `anomalies(records)`
-    (odometer going backwards or unchanged, non-positive liters, duplicates).
-  - `Cost` — fuel and service totals, cost per km.
-  - `Odometer` — current reading, the full reading history of a vehicle, and
-    `neighbors(date, samples)` (the readings right before and after a date).
+  - `Consumption` — km/L per interval between two full tanks, the fuel group an interval
+    qualifies for, `averageByGroup`, plus `anomalies(records)` (odometer going backwards or
+    unchanged, non-positive liters, duplicates).
+  - `FuelRatio` and `FuelAdvisor` — the vehicle's etanol/gasolina ratio (or the 70% rule) and
+    which fuel is cheaper at the pump.
+  - `Cost` — fuel, service and expense totals, cash and accrual, cost per km, optionally for a
+    `CostPeriod`; `ExpenseAccrual` prorates fixed expenses by coverage days.
+  - `Odometer` — current reading, the full reading history of a vehicle,
+    `neighbors(date, samples)` (the readings right before and after a date) and
+    `interpolated(at, samples)`.
+  - `ServiceApplicability` and `ServiceDefaults` — which services apply to a car or a motorcycle
+    and their suggested intervals.
+  - `DueSchedule` (`dues/`) — lead times, status level, every reminder stage, next year's item and
+    the expense a payment creates.
   - `Maintenance` — km/month pace, next service date and odometer for a rule, and
     `status(due, currentOdometer, now, zone)` (on track / due soon / overdue, with progress).
   - `TripCost` (`trips/`) — fuel cost of a trip: total distance (doubled for a round trip) ÷
     km/L × price per liter, and cost per km.
-  - `ReminderPlan` — when to notify for each rule: 9:00 on the due day, or the next 9:00 when overdue.
+  - `ReminderPlan` — when to notify for each rule: 9:00 on the due day, or the next 9:00 when
+    overdue; plus `dueReminders` and `fineReminders`, every future stage of due items and unpaid fines.
+  - `Depreciation` (`valuation/`) — start and latest FIPE quote, depreciation (negative means
+    valorização), per month and per km after 3 months and 1,000 km, and `refreshPlan` (history
+    first, then the latest price at most once a month). `CostSummary` adds it as `ownershipCost`
+    and `ownershipCostPerKilometer`, apart from the running cost.
+  - `PriceComparisons` (`fueling/`) — a fill price against the ANP state average of its
+    Sunday–Saturday week (or the week before): below, average (±1 SD or ±2%) or above.
+  - `YearReviews` (`reports/`) — the Retrospectiva of one calendar year: distance interpolated at
+    January 1, cash spending, fuel summary, consumption per fuel group, accrual cost per km and the
+    minimums a year needs.
+  - `VehicleHistories` and `PlateMask` (`reports/`) — what the history PDF contains: odometer by
+    month, regressions, services with the "lançado retroativamente" flag, consumption, km per year,
+    and the opt-in costs, fuel log and full plate. Expenses are never an input.
   - `CalendarMath` — start of day, adding days and months, month start, days between: the
     `Calendar` operations of the iOS code, on `java.time` with an explicit `ZoneId`.
 - **Interfaces** — `VehicleRepository`, `FuelEntryRepository`, `ServiceRepository`,
-  `DateProvider`, `ReminderScheduler`. Everything `suspend` and returning entities.
+  `ExpenseRepository`, `DueItemRepository`, `FipeQuoteRepository`, `DateProvider`,
+  `ReminderScheduler`, plus the remote sources `FipeCatalog` (with `UnavailableFipeCatalog` for
+  previews) and `RegionalPriceSource`, and `ReportFileStore`. Everything `suspend` and returning
+  entities; the remote ones throw `RemoteDataError`.
 - **Backup** (`backup/`) — `BackupSnapshot` (every table plus `PortablePreferences`),
   `BackupValidation` (repeated ids, records without their vehicle), `BackupError`, and the
   `BackupRepository`, `BackupCodec` and `DocumentStore` interfaces.
@@ -73,18 +105,31 @@ reading, so the same input always gives the same output.
 
 ## Data
 
-Grouped by feature like Domain: `vehicles/`, `fueling/` and `maintenance/` each have
+Grouped by feature like Domain: `vehicles/`, `fueling/`, `maintenance/`, `costs/` and `dues/` each have
 `models/` (Room entities and DAO), `mappers/` and `repositories/`; `reminders/services/` holds
 WorkManager; `database/` and `common/` hold what is shared.
 
 - **Room entities** — all suffixed `Model` (the layer rule relies on it), one DAO per feature,
   and `RodaroDatabase` in `database/`. Each record belongs to a vehicle through a foreign key with
   `ON DELETE CASCADE`; ids are UUIDs stored as text and money is stored as a decimal string.
-  The schema is exported to `app/schemas/` so migrations can be checked.
+  The schema is exported to `app/schemas/` so migrations can be checked. Version 6 added the
+  `expenses` and `due_items` tables (a driver-license item has a null `vehicleId`, which skips the
+  foreign key) and the new vehicle, fuel-up and service columns; `MIGRATION_5_6` is tested both
+  with raw SQL and by opening a migrated file with Room. Version 7 added the vehicle's FIPE and
+  purchase columns and the `fipe_quotes` table (`MIGRATION_6_7`, tested the same way, plus the
+  chain from 5).
 - **Mappers** — Room model ⇄ entity, in both directions.
 - **Repositories** — one Room repository per interface. Every call goes through `persisting`,
   which wraps storage exceptions in `RepositoryError.PersistenceFailed` and lets domain errors
   and cancellation through.
+- **Network** (`network/`) — Retrofit clients next to `OrsNetwork`: `FipeNetwork`/`FipeApi`
+  (parallelum FIPE v2, lists cached by OkHttp) and `AnpNetwork`/`AnpApi` (our
+  `rodaro.web.app/anp/precos-uf.json`), both on `PublicHttp`, with `remote {}` turning failures
+  into `RemoteDataError`. `valuation/services/FipeHttpCatalog` and
+  `fueling/services/CachedRegionalPriceSource` (file cache in `filesDir/anp`, at most one fetch a
+  day, stale copy on failure) implement the Domain interfaces.
+- **Reports** (`reports/services/`) — `AndroidReportFileStore` writes the PDF to the SAF document
+  the user picked, or to `cacheDir/reports/` for a `FileProvider` share.
 - **Services** — `SystemDateProvider` (`common/`), `WorkManagerReminderScheduler`, `ReminderWorker` (posts
   the notification) and `NotificationPermission` (bridges the runtime permission to the activity).
 - **Backup** (`backup/`) — `BackupDao` reads every table and replaces them in one transaction;
@@ -103,7 +148,8 @@ getters, exactly like computed properties on an `@Observable`.
 
 - **Lists and detail** load in a `LaunchedEffect` and reload after each write. Their
   ViewModels live in the Navigation 3 entry, so they survive configuration changes.
-- **Forms** (`VehicleForm`, `FuelEntryForm`, `ServiceEntryForm`) follow the same shape:
+- **Forms** (`VehicleForm`, `FuelEntryForm`, `ServiceEntryForm`, `ExpenseForm`, `DueItemForm`,
+  `DuePayment`) follow the same shape:
   - fields kept as `String` so "empty" and "zero" are different states;
   - `issues: List<ValidationIssue>` computed from the fields. Issues are either **blocking**
     (red, disable Save) or **warnings** (orange, informative only);
@@ -115,18 +161,34 @@ getters, exactly like computed properties on an `@Observable`.
   - `FormatStyles` — km, liters, km/L, currency and date formatting for display.
   - `Localizer` — localized strings for code outside composables (ViewModels' helpers and
     reminder text), backed by Android resources in the app and by `strings.xml` in tests.
-  - `Palette` — category colors (fuel, service) and status colors, labels and icons.
+  - `Palette` — category colors (fuel, service, expense) and status colors, labels and icons;
+    `ServiceKindDisplay`, `FuelTypeDisplay`, `ExpenseCategoryDisplay` and `DueKindDisplay` give each
+    enum its label and icon.
   - `SymbolBadge`, `MetricTileCard`, `StatusCapsule`, `ProgressBar` — shared building blocks
     of the dashboard cards.
   - `Modifier.dismissesKeyboard()` — tap outside, scroll or "Done" closes the keyboard.
 - **Vehicle dashboard** — `VehicleStats` gathers everything a card shows (consumption history,
   km/L per closing fill-up, this month's spending, every reminder with its status);
-  `VehicleTimeline` groups the history by month, filters it and builds the spending chart data.
+  `VehicleTimeline` groups the history (fuel-ups, services and expenses) by month, filters it and
+  builds the spending chart data. The detail screen also lists the vehicle's due items, opens the
+  etanol/gasolina advisor (`fueling/advisor/`) for flex vehicles and the expense, due-item and
+  payment dialogs (`costs/form/`, `dues/form/`, `dues/payment/`). The driver's license lives in the
+  Profile.
   Charts are drawn with Compose `Canvas` (`vehicles/detail/components/Charts.kt`).
-- **Reminders** — `ServiceReminderSync` re-plans service notifications at the end of the
-  list and detail `load()`: it gathers each active vehicle's records, asks
-  `ReminderPlan.reminders(records, now, zone)` (Domain) when each rule is due, cancels stale
-  notifications and schedules the rest through `ReminderScheduler`. See
+  `load()` only reads Room; right after it the screen launches `refreshValuation()` (FIPE card,
+  `FipeValueCard`) and `loadRegionalPrices()` (ANP badge on each fuel-up) in parallel, and their
+  failures are soft. The top bar's overflow menu opens the Retrospectiva and the history PDF
+  dialog. The vehicle form opens `vehicles/form/fipe/FipePickerDialog` (brand → model → year).
+- **Retrospectiva** (`vehicles/review/`) — `YearReviewViewModel` loads the records once and
+  recomputes `YearReviews` per selected year; `YearReviewScreen` hides sections without data.
+- **History PDF** (`reports/`) — `HistoryReportViewModel` builds `VehicleHistory`, turns it into a
+  plain `ReportDocument` (`HistoryReportContent`), paginates it (`pdf/ReportLayout`, pure) and draws
+  it with `PdfReportRenderer` (`android.graphics.pdf.PdfDocument`).
+- **Reminders** — `ServiceReminderSync` re-plans notifications at the end of the
+  list and detail `load()` and after a driver-license change in the Profile: it gathers each
+  active vehicle's records, asks `ReminderPlan` (Domain) for service, due-item and fine reminders
+  in one pass, cancels every pending id it did not plan and schedules the rest through
+  `ReminderScheduler`. See
   [decisions](decisions.md#reminders).
 
 ## App
@@ -142,7 +204,7 @@ One main host, and each feature owns its own routes and entries:
   `back()` never empties the start tab, and tapping the current tab pops it to its root.
 - `presentation/<feature>/navigation/` — the feature's `…Route` sealed interface and a
   `…Entries(navigator)` extension on `EntryProviderScope<Route>` that maps each route to its
-  screen. Vehicles: `VehiclesRoute` (`VehicleList`, `ArchivedVehicles`, `VehicleDetail`) in
+  screen. Vehicles: `VehiclesRoute` (`VehicleList`, `ArchivedVehicles`, `VehicleDetail`, `YearReview`) in
   `vehiclesEntries`; Trips: `TripsRoute.TripCost` in `tripsEntries`; Profile: `ProfileRoute.Profile`,
   `ProfileRoute.Auth`, `ProfileRoute.Preferences` and `ProfileRoute.Backup` in `profileEntries`. Forms stay dialogs
   opened by their screen, not destinations.
@@ -184,6 +246,13 @@ and maps models to entities → ViewModel runs Domain calculations (`VehicleStat
 
 **Write:** form builds an entity → repository upserts the model → dialog dismisses → parent
 ViewModel reloads.
+
+## Outside the app
+
+`scripts/anp_prices.py` and `.github/workflows/anp-prices.yml` build the ANP state averages that
+the app downloads: weekly, from ANP's spreadsheets, merged into the published JSON and deployed to
+Firebase Hosting without touching git. See [decisions](decisions.md#anp-averages-are-published-by-our-own-weekly-job)
+and [CI](ci.md#anp-prices).
 
 ## Enforcement
 

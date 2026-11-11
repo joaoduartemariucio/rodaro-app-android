@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -20,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import br.com.joaoduartemariucio.rodaro.R
 import br.com.joaoduartemariucio.rodaro.presentation.common.MetricTileCard
 import br.com.joaoduartemariucio.rodaro.presentation.common.Palette
+import br.com.joaoduartemariucio.rodaro.presentation.common.UnitConversion
 import br.com.joaoduartemariucio.rodaro.presentation.common.formattedConsumption
 import br.com.joaoduartemariucio.rodaro.presentation.common.formattedCurrency
 import br.com.joaoduartemariucio.rodaro.presentation.common.formattedKilometers
@@ -49,7 +51,9 @@ fun VehicleSummaryCard(stats: VehicleStats) {
                 title = stringResource(R.string.cost_per_km),
                 value = stats.cost.costPerKilometer?.formattedPerKilometer(localizer),
                 caption =
-                    if (stats.cost.distance > 0) {
+                    if (stats.cost.distance > 0 && stats.cost.expensesInCost.signum() != 0) {
+                        stringResource(R.string.over_distance_with_expenses, stats.cost.distance.formattedKilometers())
+                    } else if (stats.cost.distance > 0) {
                         stringResource(R.string.over_distance, stats.cost.distance.formattedKilometers())
                     } else {
                         null
@@ -62,13 +66,22 @@ fun VehicleSummaryCard(stats: VehicleStats) {
         Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             MetricTileCard(
                 title = stringResource(R.string.total_spent),
-                value = stats.cost.totalCost.formattedCurrency,
+                value = stats.cost.totalSpent.formattedCurrency,
                 caption =
-                    stringResource(
-                        R.string.fuel_and_services,
-                        stats.cost.fuelCost.formattedCurrency,
-                        stats.cost.serviceCost.formattedCurrency,
-                    ),
+                    if (stats.cost.byCategory.isEmpty()) {
+                        stringResource(
+                            R.string.fuel_and_services,
+                            stats.cost.fuelCost.formattedCurrency,
+                            stats.cost.serviceCost.formattedCurrency,
+                        )
+                    } else {
+                        stringResource(
+                            R.string.fuel_services_and_expenses,
+                            stats.cost.fuelCost.formattedCurrency,
+                            stats.cost.serviceCost.formattedCurrency,
+                            stats.cost.expensesSpent.formattedCurrency,
+                        )
+                    },
                 icon = Icons.Filled.CreditCard,
                 tint = Palette.service,
                 modifier = Modifier.weight(1f).fillMaxHeight(),
@@ -80,6 +93,13 @@ fun VehicleSummaryCard(stats: VehicleStats) {
                 icon = Icons.Filled.CalendarMonth,
                 tint = Palette.orange,
                 modifier = Modifier.weight(1f).fillMaxHeight(),
+            )
+        }
+        stats.cost.ownershipCostPerKilometer?.takeIf { UnitConversion.usesBrazilianReal }?.let {
+            Text(
+                stringResource(R.string.cost_per_km_with_depreciation, it.formattedPerKilometer(localizer)),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }

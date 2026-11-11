@@ -20,6 +20,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import br.com.joaoduartemariucio.rodaro.R
+import br.com.joaoduartemariucio.rodaro.domain.fueling.calculations.PriceComparison
 import br.com.joaoduartemariucio.rodaro.domain.fueling.entities.FuelEntry
 import br.com.joaoduartemariucio.rodaro.presentation.common.Palette
 import br.com.joaoduartemariucio.rodaro.presentation.common.SymbolBadge
@@ -31,12 +32,14 @@ import br.com.joaoduartemariucio.rodaro.presentation.common.formattedKilometers
 import br.com.joaoduartemariucio.rodaro.presentation.common.formattedLiters
 import br.com.joaoduartemariucio.rodaro.presentation.common.formattedPerLiter
 import br.com.joaoduartemariucio.rodaro.presentation.common.rememberLocalizer
+import br.com.joaoduartemariucio.rodaro.presentation.common.shortLabel
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun FuelEntryRow(
     entry: FuelEntry,
     consumption: Double?,
+    comparison: PriceComparison.Compared? = null,
 ) {
     val localizer = rememberLocalizer()
     Row(
@@ -65,7 +68,23 @@ fun FuelEntryRow(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                entry.fuelType?.let { Tag(stringResource(it.shortLabel), Palette.fuel) }
                 consumption?.let { Tag(it.formattedConsumption(localizer), Palette.fuel) }
+                comparison?.let {
+                    val text =
+                        when (it.level) {
+                            PriceComparison.Level.BELOW -> stringResource(R.string.anp_below, it.uf)
+                            PriceComparison.Level.AVERAGE -> stringResource(R.string.anp_average, it.uf)
+                            PriceComparison.Level.ABOVE -> stringResource(R.string.anp_above, it.uf)
+                        }
+                    val color =
+                        when (it.level) {
+                            PriceComparison.Level.BELOW -> Palette.green
+                            PriceComparison.Level.AVERAGE -> MaterialTheme.colorScheme.onSurfaceVariant
+                            PriceComparison.Level.ABOVE -> Palette.orange
+                        }
+                    Tag(if (it.isPreviousWeek) "$text ${stringResource(R.string.anp_previous_week)}" else text, color)
+                }
                 Tag(
                     stringResource(if (entry.isFullTank) R.string.full_tank else R.string.partial_fill),
                     MaterialTheme.colorScheme.onSurfaceVariant,

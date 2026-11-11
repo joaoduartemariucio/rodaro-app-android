@@ -19,6 +19,9 @@ app/build/
 # Firebase CLI cache
 .firebase/
 
+# ANP averages: built by scripts/anp_prices.py right before each Hosting deploy, never committed.
+hosting/public/anp/
+
 # Firebase config with the API key: never commit it to this public repo.
 # CI restores it from the GOOGLE_SERVICES_JSON secret.
 app/google-services.json

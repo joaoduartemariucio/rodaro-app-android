@@ -39,6 +39,7 @@ fun SpendingChartCard(months: List<VehicleTimeline.MonthSpending>) {
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             Legend(stringResource(R.string.fuel), Palette.fuel)
             Legend(stringResource(R.string.services), Palette.service)
+            Legend(stringResource(R.string.filter_expenses), Palette.expense)
         }
     }
 }

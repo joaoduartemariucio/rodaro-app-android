@@ -1,8 +1,13 @@
 package br.com.joaoduartemariucio.rodaro.calculations
 
 import br.com.joaoduartemariucio.rodaro.domain.costs.calculations.Cost
+import br.com.joaoduartemariucio.rodaro.domain.costs.calculations.CostPeriod
+import br.com.joaoduartemariucio.rodaro.domain.costs.entities.ExpenseCategory
+import br.com.joaoduartemariucio.rodaro.domain.costs.entities.FineDetails
+import br.com.joaoduartemariucio.rodaro.domain.valuation.calculations.DepreciationSummary
 import org.junit.Test
 import java.math.BigDecimal
+import java.time.YearMonth
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
@@ -79,5 +84,97 @@ class CostTests {
 
         assertEquals(800.0, Cost.summary(everything, emptyList()).distance)
         assertEquals(400.0, Cost.summary(recent, emptyList()).distance)
+    }
+
+    private val fuel = listOf(full(0, 1_000.0, 40.0), full(9, 1_400.0, 40.0))
+
+    @Test
+    fun `fines, financing and accessories stay out of cost per km but count as spent`() {
+        val expenses =
+            listOf(
+                expense(ExpenseCategory.MULTA, "100", dayOffset = 2, fine = FineDetails()),
+                expense(ExpenseCategory.MULTA, "300", dayOffset = 3, fine = FineDetails(isPaid = false)),
+                expense(ExpenseCategory.FINANCIAMENTO, "500", dayOffset = 4),
+                expense(ExpenseCategory.ACESSORIOS, "80", dayOffset = 5),
+                expense(ExpenseCategory.PEDAGIO, "20", dayOffset = 6),
+            )
+
+        val summary = Cost.summary(fuel, emptyList(), expenses, zone = utc)
+
+        assertDecimal("20", summary.expensesInCost)
+        assertDecimal("420", summary.totalCost)
+        assertDecimal("1.05", summary.costPerKilometer)
+        assertDecimal("100", summary.fines)
+        assertDecimal("580", summary.expensesOutsideCost)
+        assertDecimal("700", summary.expensesSpent)
+        assertDecimal("1100", summary.totalSpent)
+        assertEquals(setOf(ExpenseCategory.MULTA, ExpenseCategory.FINANCIAMENTO, ExpenseCategory.ACESSORIOS, ExpenseCategory.PEDAGIO), summary.byCategory.keys)
+        assertDecimal("100", summary.byCategory[ExpenseCategory.MULTA])
+    }
+
+    @Test
+    fun `all time accrues fixed expenses over the span of the records`() {
+        val insurance = expense(ExpenseCategory.SEGURO, "365")
+
+        val summary = Cost.summary(fuel, emptyList(), listOf(insurance), zone = utc)
+
+        assertDecimal("10", summary.expensesInCost)
+        assertDecimal("365", summary.byCategory[ExpenseCategory.SEGURO])
+        assertDecimal("765", summary.totalSpent)
+        assertDecimal("0", Cost.summary(emptyList(), emptyList(), listOf(insurance), zone = utc).expensesInCost)
+    }
+
+    @Test
+    fun `a period filters records, accrues fixed expenses and interpolates the odometer at its ends`() {
+        val records = listOf(full(0, 1_000.0, 40.0), full(10, 2_000.0, 40.0), full(20, 3_000.0, 40.0))
+        val expenses =
+            listOf(
+                expense(ExpenseCategory.SEGURO, "365"),
+                expense(ExpenseCategory.PEDAGIO, "30", dayOffset = 12),
+                expense(ExpenseCategory.PEDAGIO, "99", dayOffset = 16),
+            )
+        val samples = listOf(sample(0, 1_000.0), sample(20, 3_000.0))
+
+        val summary = Cost.summary(records, emptyList(), expenses, samples, CostPeriod(day(5), day(15)), utc)
+
+        assertEquals(1_000.0, summary.distance)
+        assertDecimal("200", summary.fuelCost)
+        assertDecimal("40", summary.expensesInCost)
+        assertDecimal("0.24", summary.costPerKilometer)
+        assertEquals(mapOf(ExpenseCategory.PEDAGIO to BigDecimal("30")), summary.byCategory)
+        assertEquals(0.0, Cost.summary(records, emptyList(), period = CostPeriod(day(30), day(40)), zone = utc).distance)
+    }
+
+    @Test
+    fun `ownership cost adds depreciation without touching running cost or spending`() {
+        val base =
+            Cost.summary(
+                fuel = listOf(full(0, 1_000.0, 40.0, price = BigDecimal(5)), full(10, 1_400.0, 40.0, price = BigDecimal(5))),
+                services = emptyList(),
+            )
+        val depreciation =
+            DepreciationSummary(
+                start = quote(YearMonth.of(2026, 1), "90000"),
+                latest = quote(YearMonth.of(2026, 5), "88000"),
+                amount = BigDecimal("2000"),
+                months = 4,
+                kilometers = 4_000.0,
+                perMonth = BigDecimal("500"),
+                perKilometer = BigDecimal("0.5"),
+                purchasePrice = null,
+                purchaseVsLatest = null,
+                startsAtPurchase = false,
+            )
+        val summary = base.copy(depreciation = depreciation)
+
+        assertDecimal("400", summary.totalCost)
+        assertDecimal("400", summary.totalSpent)
+        assertDecimal("2400", summary.ownershipCost)
+        assertDecimal("1", summary.costPerKilometer)
+        assertDecimal("1.5", summary.ownershipCostPerKilometer)
+        assertNull(base.ownershipCostPerKilometer)
+        assertDecimal("400", base.ownershipCost)
+        assertNull(summary.copy(depreciation = depreciation.copy(perKilometer = null)).ownershipCostPerKilometer)
+        assertNull(Cost.summary(emptyList(), emptyList()).copy(depreciation = depreciation).ownershipCostPerKilometer)
     }
 }

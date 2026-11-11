@@ -1,5 +1,6 @@
 package br.com.joaoduartemariucio.rodaro.data.maintenance.models
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
@@ -25,4 +26,6 @@ data class ServiceEntryModel(
     val odometer: Double,
     val cost: BigDecimal,
     val notes: String,
+    val workshop: String? = null,
+    @ColumnInfo(defaultValue = "0") val createdAt: Instant = date,
 )

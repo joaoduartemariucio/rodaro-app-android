@@ -5,11 +5,13 @@ import br.com.joaoduartemariucio.rodaro.calculations.decimal
 import br.com.joaoduartemariucio.rodaro.calculations.full
 import br.com.joaoduartemariucio.rodaro.calculations.rule
 import br.com.joaoduartemariucio.rodaro.calculations.testVehicleId
+import br.com.joaoduartemariucio.rodaro.domain.fueling.entities.FuelType
 import br.com.joaoduartemariucio.rodaro.domain.preferences.entities.CurrencyOption
 import br.com.joaoduartemariucio.rodaro.domain.preferences.entities.UnitSystem
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.Vehicle
 import br.com.joaoduartemariucio.rodaro.fakes.FakeAnalytics
 import br.com.joaoduartemariucio.rodaro.fakes.FixedDateProvider
+import br.com.joaoduartemariucio.rodaro.fakes.InMemoryExpenseRepository
 import br.com.joaoduartemariucio.rodaro.fakes.InMemoryFuelEntryRepository
 import br.com.joaoduartemariucio.rodaro.fakes.InMemoryPreferencesRepository
 import br.com.joaoduartemariucio.rodaro.fakes.InMemoryRouteRepository
@@ -41,6 +43,7 @@ class AnalyticsEventsTests {
                     emptyList(),
                     null,
                     analytics,
+                    suggestedFuelType = FuelType.ETANOL,
                 )
             viewModel.odometer = NumberInput.text(100.0, NumberInput.Style.KILOMETERS)
             viewModel.liters = NumberInput.text(10.0, NumberInput.Style.LITERS)
@@ -51,6 +54,7 @@ class AnalyticsEventsTests {
             assertEquals(listOf("fuel_up_saved"), analytics.names())
             assertEquals("create", analytics.parameters("fuel_up_saved")?.get("mode"))
             assertEquals("true", analytics.parameters("fuel_up_saved")?.get("full_tank"))
+            assertEquals("etanol", analytics.parameters("fuel_up_saved")?.get("fuel_type"))
         }
 
     @Test
@@ -108,6 +112,7 @@ class AnalyticsEventsTests {
                     InMemoryVehicleRepository(listOf(vehicle)),
                     InMemoryFuelEntryRepository(),
                     InMemoryServiceRepository(),
+                    InMemoryExpenseRepository(),
                     FixedDateProvider(day(30)),
                     null,
                     analytics,

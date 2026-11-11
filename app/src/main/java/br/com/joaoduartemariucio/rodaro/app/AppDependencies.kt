@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.FileProvider
 import androidx.work.WorkManager
 import br.com.joaoduartemariucio.rodaro.BuildConfig
 import br.com.joaoduartemariucio.rodaro.data.PreviewData
@@ -13,16 +14,25 @@ import br.com.joaoduartemariucio.rodaro.data.backup.services.ContentResolverDocu
 import br.com.joaoduartemariucio.rodaro.data.common.services.FirebaseAccountService
 import br.com.joaoduartemariucio.rodaro.data.common.services.FirebaseAnalyticsTracker
 import br.com.joaoduartemariucio.rodaro.data.common.services.SystemDateProvider
+import br.com.joaoduartemariucio.rodaro.data.costs.repositories.RoomExpenseRepository
 import br.com.joaoduartemariucio.rodaro.data.database.RodaroDatabase
+import br.com.joaoduartemariucio.rodaro.data.dues.repositories.RoomDueItemRepository
 import br.com.joaoduartemariucio.rodaro.data.fueling.repositories.RoomFuelEntryRepository
+import br.com.joaoduartemariucio.rodaro.data.fueling.services.CachedRegionalPriceSource
 import br.com.joaoduartemariucio.rodaro.data.maintenance.repositories.RoomServiceRepository
+import br.com.joaoduartemariucio.rodaro.data.network.AnpNetwork
+import br.com.joaoduartemariucio.rodaro.data.network.FipeNetwork
 import br.com.joaoduartemariucio.rodaro.data.network.OrsNetwork
+import br.com.joaoduartemariucio.rodaro.data.network.PublicHttp
 import br.com.joaoduartemariucio.rodaro.data.preferences.LocaleLanguageApplier
 import br.com.joaoduartemariucio.rodaro.data.preferences.SharedPreferencesPreferencesRepository
 import br.com.joaoduartemariucio.rodaro.data.reminders.services.NotificationPermission
 import br.com.joaoduartemariucio.rodaro.data.reminders.services.WorkManagerReminderScheduler
+import br.com.joaoduartemariucio.rodaro.data.reports.services.AndroidReportFileStore
 import br.com.joaoduartemariucio.rodaro.data.trips.repositories.OpenRouteServiceProvider
 import br.com.joaoduartemariucio.rodaro.data.trips.repositories.RoomRouteRepository
+import br.com.joaoduartemariucio.rodaro.data.valuation.repositories.RoomFipeQuoteRepository
+import br.com.joaoduartemariucio.rodaro.data.valuation.services.FipeHttpCatalog
 import br.com.joaoduartemariucio.rodaro.data.vehicles.repositories.RoomVehicleRepository
 import br.com.joaoduartemariucio.rodaro.domain.backup.repositories.BackupRepository
 import br.com.joaoduartemariucio.rodaro.domain.backup.services.BackupCodec
@@ -30,32 +40,48 @@ import br.com.joaoduartemariucio.rodaro.domain.backup.services.DocumentStore
 import br.com.joaoduartemariucio.rodaro.domain.common.services.AccountService
 import br.com.joaoduartemariucio.rodaro.domain.common.services.Analytics
 import br.com.joaoduartemariucio.rodaro.domain.common.services.DateProvider
+import br.com.joaoduartemariucio.rodaro.domain.costs.repositories.ExpenseRepository
+import br.com.joaoduartemariucio.rodaro.domain.dues.repositories.DueItemRepository
 import br.com.joaoduartemariucio.rodaro.domain.fueling.repositories.FuelEntryRepository
+import br.com.joaoduartemariucio.rodaro.domain.fueling.services.RegionalPriceSource
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.repositories.ServiceRepository
 import br.com.joaoduartemariucio.rodaro.domain.preferences.entities.Preferences
 import br.com.joaoduartemariucio.rodaro.domain.preferences.repositories.PreferencesRepository
 import br.com.joaoduartemariucio.rodaro.domain.reminders.services.ReminderScheduler
+import br.com.joaoduartemariucio.rodaro.domain.reports.services.ReportFileStore
 import br.com.joaoduartemariucio.rodaro.domain.trips.repositories.RouteRepository
 import br.com.joaoduartemariucio.rodaro.domain.trips.services.RouteEstimateProvider
 import br.com.joaoduartemariucio.rodaro.domain.trips.services.UnavailableRouteEstimateProvider
+import br.com.joaoduartemariucio.rodaro.domain.valuation.repositories.FipeQuoteRepository
+import br.com.joaoduartemariucio.rodaro.domain.valuation.services.FipeCatalog
+import br.com.joaoduartemariucio.rodaro.domain.valuation.services.UnavailableFipeCatalog
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.repositories.VehicleRepository
 import br.com.joaoduartemariucio.rodaro.presentation.common.DisplayPreferences
 import br.com.joaoduartemariucio.rodaro.presentation.common.ResourcesLocalizer
 import br.com.joaoduartemariucio.rodaro.presentation.reminders.ServiceReminderSync
+import br.com.joaoduartemariucio.rodaro.presentation.reports.pdf.PdfReportRenderer
+import br.com.joaoduartemariucio.rodaro.presentation.reports.pdf.ReportRenderer
+import br.com.joaoduartemariucio.rodaro.presentation.vehicles.detail.RefreshBackoff
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import okhttp3.Cache
+import java.io.File
 
 class AppDependencies(
     context: Context,
     val database: RodaroDatabase,
     val isUsingFallbackStore: Boolean = false,
     val analytics: Analytics = NoAnalytics,
+    isOnline: Boolean = true,
 ) {
     val vehicleRepository: VehicleRepository = RoomVehicleRepository(database.vehicles())
     val fuelEntryRepository: FuelEntryRepository = RoomFuelEntryRepository(database.fuelEntries(), database.vehicles())
     val serviceRepository: ServiceRepository = RoomServiceRepository(database.services(), database.vehicles())
     val routeRepository: RouteRepository = RoomRouteRepository(database.tripRoutes())
+    val expenseRepository: ExpenseRepository = RoomExpenseRepository(database.expenses(), database.vehicles())
+    val dueItemRepository: DueItemRepository = RoomDueItemRepository(database.dueItems(), database.vehicles())
+    val fipeQuoteRepository: FipeQuoteRepository = RoomFipeQuoteRepository(database.fipeQuotes(), database.vehicles())
     val backupRepository: BackupRepository = RoomBackupRepository(database.backup())
     val backupCodec: BackupCodec = JsonBackupCodec(BuildConfig.VERSION_NAME)
     val documentStore: DocumentStore = ContentResolverDocumentStore(context.contentResolver, JsonBackupCodec.MAX_CHARACTERS)
@@ -66,6 +92,29 @@ class AppDependencies(
             OpenRouteServiceProvider(OrsNetwork.api(BuildConfig.ORS_API_KEY, log = DebugLog.http))
         }
     val dateProvider: DateProvider = SystemDateProvider()
+    private val reportsDirectory = File(context.cacheDir, "reports")
+    val reportFileStore: ReportFileStore =
+        AndroidReportFileStore(
+            directory = reportsDirectory,
+            openOutput = { uri, mode -> context.contentResolver.openOutputStream(uri, mode) },
+            uriFor = { FileProvider.getUriForFile(context, "${context.packageName}.files", it).toString() },
+        )
+    val reportRenderer: ReportRenderer = PdfReportRenderer()
+    private val userAgent = PublicHttp.userAgent(BuildConfig.VERSION_NAME)
+    private val fipeCache = Cache(File(context.cacheDir, "http/fipe"), FIPE_CACHE_BYTES)
+    val fipeRefreshBackoff = RefreshBackoff()
+    val fipeCatalog: FipeCatalog =
+        if (isOnline) FipeHttpCatalog(FipeNetwork.api(userAgent, cache = fipeCache, log = DebugLog.http)) else UnavailableFipeCatalog
+    val regionalPriceSource: RegionalPriceSource? =
+        if (isOnline) {
+            CachedRegionalPriceSource(
+                AnpNetwork.api(userAgent, log = DebugLog.http),
+                File(context.filesDir, "anp"),
+                dateProvider,
+            )
+        } else {
+            null
+        }
     val accountService: AccountService = FirebaseAccountService(context) { ForegroundActivity.current }
     val preferencesRepository: PreferencesRepository = SharedPreferencesPreferencesRepository(context)
     val localeLanguageApplier = LocaleLanguageApplier(context)
@@ -74,6 +123,8 @@ class AppDependencies(
             WorkManager.getInstance(context).cancelAllWork()
             NotificationManagerCompat.from(context).cancelAll()
             database.clearAllTables()
+            fipeCache.evictAll()
+            reportsDirectory.deleteRecursively()
             val kept = Preferences(usageStatisticsEnabled = preferencesRepository.get().usageStatisticsEnabled)
             preferencesRepository.clear()
             preferencesRepository.save(kept)
@@ -90,6 +141,8 @@ class AppDependencies(
             vehicleRepository = vehicleRepository,
             fuelEntryRepository = fuelEntryRepository,
             serviceRepository = serviceRepository,
+            dueItemRepository = dueItemRepository,
+            expenseRepository = expenseRepository,
             scheduler = reminderScheduler,
             dateProvider = dateProvider,
             localizer = ResourcesLocalizer(context.resources),
@@ -101,6 +154,8 @@ class AppDependencies(
     }
 
     companion object {
+        private const val FIPE_CACHE_BYTES = 2L * 1024 * 1024
+
         fun live(context: Context): AppDependencies =
             try {
                 val database = RodaroDatabase.create(context)
@@ -117,7 +172,10 @@ class AppDependencies(
             analytics: Analytics = NoAnalytics,
         ): AppDependencies = AppDependencies(context, RodaroDatabase.create(context, inMemory = true), isUsingFallbackStore, analytics)
 
-        fun preview(context: Context): AppDependencies = inMemory(context).also { runBlocking { PreviewData.seed(it.database) } }
+        fun preview(context: Context): AppDependencies =
+            AppDependencies(context, RodaroDatabase.create(context, inMemory = true), isOnline = false).also {
+                runBlocking { PreviewData.seed(it.database) }
+            }
     }
 }
 

@@ -1,6 +1,11 @@
 package br.com.joaoduartemariucio.rodaro.calculations
 
 import br.com.joaoduartemariucio.rodaro.domain.common.calculations.atHour
+import br.com.joaoduartemariucio.rodaro.domain.costs.entities.ExpenseCategory
+import br.com.joaoduartemariucio.rodaro.domain.costs.entities.FineDetails
+import br.com.joaoduartemariucio.rodaro.domain.dues.calculations.DueSchedule
+import br.com.joaoduartemariucio.rodaro.domain.dues.calculations.DueStage
+import br.com.joaoduartemariucio.rodaro.domain.dues.entities.DueKind
 import br.com.joaoduartemariucio.rodaro.domain.fueling.entities.FuelEntry
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.calculations.MaintenanceForecast
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.calculations.MaintenanceForecast.Trigger
@@ -13,6 +18,9 @@ import br.com.joaoduartemariucio.rodaro.domain.reminders.calculations.ReminderPl
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.Vehicle
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.VehicleRecords
 import org.junit.Test
+import java.time.Instant
+import java.time.LocalDate
+import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -189,5 +197,51 @@ class ReminderPlanTests {
         val planned = ReminderPlan.reminders(listOf(records(rules = listOf(later, sooner))), day(1), utc)
 
         assertEquals(listOf(sooner.id, later.id), planned.map { it.id })
+    }
+
+    @Test
+    fun `due reminders cover every future stage, include the driver license and skip archived or unknown vehicles`() {
+        val archived = Vehicle(name = "Old", createdAt = day(0), isArchived = true)
+        val ipva = dueItem(DueKind.IPVA, LocalDate.parse("2001-03-01"))
+        val license = dueItem(DueKind.CNH, LocalDate.parse("2001-06-01"), vehicleId = null)
+        val items =
+            listOf(
+                ipva,
+                license,
+                dueItem(DueKind.SEGURO, LocalDate.parse("2001-03-01"), vehicleId = archived.id),
+                dueItem(DueKind.SEGURO, LocalDate.parse("2001-03-01"), vehicleId = UUID.randomUUID()),
+                dueItem(DueKind.LICENCIAMENTO, LocalDate.parse("2001-03-01"), paidAt = day(1)),
+            )
+
+        val planned = ReminderPlan.dueReminders(items, listOf(vehicle, archived), day(1), utc)
+
+        assertEquals(setOf(ipva.id, license.id), planned.map { it.item.id }.toSet())
+        assertEquals(7, planned.count { it.item.id == ipva.id })
+        assertEquals(6, planned.count { it.item.id == license.id })
+        assertEquals(vehicle, planned.first { it.item.id == ipva.id }.vehicle)
+        assertEquals(null, planned.first { it.item.id == license.id }.vehicle)
+        assertEquals(planned.sortedBy { it.fireDate }, planned)
+        assertEquals(DueSchedule.reminderId(ipva.id, DueStage.DaysBefore(15)), planned.first().id)
+        assertEquals(planned.size, planned.map { it.id }.toSet().size)
+    }
+
+    @Test
+    fun `fine reminders fire 7 days before and on the due day while unpaid`() {
+        val dueDate = LocalDate.parse("2001-02-01")
+        val unpaid = expense(ExpenseCategory.MULTA, "195.23", fine = FineDetails(dueDate = dueDate, isPaid = false))
+        val paid = expense(ExpenseCategory.MULTA, "195.23", fine = FineDetails(dueDate = dueDate))
+        val undated = expense(ExpenseCategory.MULTA, "195.23", fine = FineDetails(isPaid = false))
+        val archived = Vehicle(name = "Old", createdAt = day(0), isArchived = true)
+        val elsewhere = unpaid.copy(id = UUID.randomUUID(), vehicleId = archived.id)
+
+        val planned = ReminderPlan.fineReminders(listOf(unpaid, paid, undated, elsewhere), listOf(vehicle, archived), day(1), utc)
+
+        assertEquals(listOf(DueStage.DaysBefore(7), DueStage.DueToday), planned.map { it.stage })
+        assertEquals(listOf(Instant.parse("2001-01-25T09:00:00Z"), Instant.parse("2001-02-01T09:00:00Z")), planned.map { it.fireDate })
+        assertTrue(planned.all { it.expense.id == unpaid.id && it.dueDate == dueDate })
+
+        val later = ReminderPlan.fineReminders(listOf(unpaid), listOf(vehicle), Instant.parse("2001-01-26T00:00:00Z"), utc)
+        assertEquals(listOf(DueStage.DueToday), later.map { it.stage })
+        assertFalse(ReminderPlan.fineReminders(listOf(unpaid), listOf(vehicle), Instant.parse("2001-02-02T00:00:00Z"), utc).isNotEmpty())
     }
 }
