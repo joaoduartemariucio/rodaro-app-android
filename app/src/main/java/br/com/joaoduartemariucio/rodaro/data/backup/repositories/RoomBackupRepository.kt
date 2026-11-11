@@ -8,6 +8,7 @@ import br.com.joaoduartemariucio.rodaro.data.dues.mappers.DueItemMapper
 import br.com.joaoduartemariucio.rodaro.data.fueling.mappers.FuelEntryMapper
 import br.com.joaoduartemariucio.rodaro.data.maintenance.mappers.ServiceMapper
 import br.com.joaoduartemariucio.rodaro.data.trips.mappers.SavedRouteMapper
+import br.com.joaoduartemariucio.rodaro.data.valuation.mappers.FipeQuoteMapper
 import br.com.joaoduartemariucio.rodaro.data.vehicles.mappers.VehicleMapper
 import br.com.joaoduartemariucio.rodaro.domain.backup.entities.BackupSnapshot
 import br.com.joaoduartemariucio.rodaro.domain.backup.repositories.BackupRepository
@@ -26,6 +27,7 @@ class RoomBackupRepository(
                 savedRoutes = tables.tripRoutes.map(SavedRouteMapper::entity),
                 expenses = tables.expenses.map(ExpenseMapper::entity),
                 dueItems = tables.dueItems.map(DueItemMapper::entity),
+                fipeQuotes = tables.fipeQuotes.map(FipeQuoteMapper::entity),
             )
         }
 
@@ -40,6 +42,7 @@ class RoomBackupRepository(
                     tripRoutes = snapshot.savedRoutes.map(SavedRouteMapper::model),
                     expenses = snapshot.expenses.map(ExpenseMapper::model),
                     dueItems = snapshot.dueItems.map(DueItemMapper::model),
+                    fipeQuotes = snapshot.fipeQuotes.map(FipeQuoteMapper::model),
                 ),
             )
         }

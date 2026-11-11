@@ -48,6 +48,9 @@ jobs:
       - name: Format check
         run: make format-check
 
+      - name: Script tests
+        run: make scripts-test
+
       - name: Upload lint report
         if: always()
         uses: actions/upload-artifact@v4

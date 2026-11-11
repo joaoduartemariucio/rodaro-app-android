@@ -19,6 +19,8 @@ import br.com.joaoduartemariucio.rodaro.data.maintenance.models.ServiceEntryMode
 import br.com.joaoduartemariucio.rodaro.data.maintenance.models.ServiceRuleModel
 import br.com.joaoduartemariucio.rodaro.data.trips.models.TripRouteDao
 import br.com.joaoduartemariucio.rodaro.data.trips.models.TripRouteModel
+import br.com.joaoduartemariucio.rodaro.data.valuation.models.FipeQuoteDao
+import br.com.joaoduartemariucio.rodaro.data.valuation.models.FipeQuoteModel
 import br.com.joaoduartemariucio.rodaro.data.vehicles.models.VehicleDao
 import br.com.joaoduartemariucio.rodaro.data.vehicles.models.VehicleModel
 
@@ -31,8 +33,9 @@ import br.com.joaoduartemariucio.rodaro.data.vehicles.models.VehicleModel
         TripRouteModel::class,
         ExpenseModel::class,
         DueItemModel::class,
+        FipeQuoteModel::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -50,6 +53,8 @@ abstract class RodaroDatabase : RoomDatabase() {
     abstract fun expenses(): ExpenseDao
 
     abstract fun dueItems(): DueItemDao
+
+    abstract fun fipeQuotes(): FipeQuoteDao
 
     companion object {
         private const val FILE_NAME = "rodaro.db"
@@ -132,6 +137,26 @@ abstract class RodaroDatabase : RoomDatabase() {
                 }
             }
 
+        internal val MIGRATION_6_7 =
+            object : Migration(6, 7) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE `vehicles` ADD COLUMN `fipeCode` TEXT")
+                    db.execSQL("ALTER TABLE `vehicles` ADD COLUMN `fipeYearCode` TEXT")
+                    db.execSQL("ALTER TABLE `vehicles` ADD COLUMN `fipeBrandName` TEXT")
+                    db.execSQL("ALTER TABLE `vehicles` ADD COLUMN `fipeModelName` TEXT")
+                    db.execSQL("ALTER TABLE `vehicles` ADD COLUMN `fipeYearName` TEXT")
+                    db.execSQL("ALTER TABLE `vehicles` ADD COLUMN `purchaseDate` TEXT")
+                    db.execSQL("ALTER TABLE `vehicles` ADD COLUMN `purchasePrice` TEXT")
+                    db.execSQL(
+                        "CREATE TABLE IF NOT EXISTS `fipe_quotes` (`id` TEXT NOT NULL, `vehicleId` TEXT NOT NULL, " +
+                            "`fipeCode` TEXT NOT NULL, `yearCode` TEXT NOT NULL, `referenceMonth` TEXT NOT NULL, " +
+                            "`price` TEXT NOT NULL, `fetchedAt` INTEGER NOT NULL, PRIMARY KEY(`id`), " +
+                            "FOREIGN KEY(`vehicleId`) REFERENCES `vehicles`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+                    )
+                    db.execSQL("CREATE INDEX IF NOT EXISTS `index_fipe_quotes_vehicleId` ON `fipe_quotes` (`vehicleId`)")
+                }
+            }
+
         fun create(
             context: Context,
             inMemory: Boolean = false,
@@ -143,7 +168,7 @@ abstract class RodaroDatabase : RoomDatabase() {
                     Room.databaseBuilder(context, RodaroDatabase::class.java, FILE_NAME)
                 }
             return builder
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                 .build()
         }
     }

@@ -17,16 +17,21 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.ListAlt
+import androidx.compose.material.icons.filled.AutoGraph
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.material.icons.filled.LocalGasStation
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -63,6 +68,7 @@ import br.com.joaoduartemariucio.rodaro.R
 import br.com.joaoduartemariucio.rodaro.app.LocalDependencies
 import br.com.joaoduartemariucio.rodaro.domain.costs.entities.Expense
 import br.com.joaoduartemariucio.rodaro.domain.dues.entities.DueItem
+import br.com.joaoduartemariucio.rodaro.domain.fueling.calculations.PriceComparison
 import br.com.joaoduartemariucio.rodaro.domain.fueling.entities.FuelEntry
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.entities.ServiceEntry
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.entities.ServiceRule
@@ -90,11 +96,13 @@ import br.com.joaoduartemariucio.rodaro.presentation.fueling.form.FuelEntryFormD
 import br.com.joaoduartemariucio.rodaro.presentation.fueling.form.FuelEntryFormViewModel
 import br.com.joaoduartemariucio.rodaro.presentation.maintenance.form.ServiceEntryFormDialog
 import br.com.joaoduartemariucio.rodaro.presentation.maintenance.form.ServiceEntryFormViewModel
+import br.com.joaoduartemariucio.rodaro.presentation.reports.HistoryReportDialog
 import br.com.joaoduartemariucio.rodaro.presentation.vehicles.VehicleStats
 import br.com.joaoduartemariucio.rodaro.presentation.vehicles.detail.components.ConsumptionChartCard
 import br.com.joaoduartemariucio.rodaro.presentation.vehicles.detail.components.DueItemRow
 import br.com.joaoduartemariucio.rodaro.presentation.vehicles.detail.components.ExpenseRow
 import br.com.joaoduartemariucio.rodaro.presentation.vehicles.detail.components.ExpenseSummaryCard
+import br.com.joaoduartemariucio.rodaro.presentation.vehicles.detail.components.FipeValueCard
 import br.com.joaoduartemariucio.rodaro.presentation.vehicles.detail.components.FuelEntryRow
 import br.com.joaoduartemariucio.rodaro.presentation.vehicles.detail.components.ServiceDueRow
 import br.com.joaoduartemariucio.rodaro.presentation.vehicles.detail.components.ServiceEntryRow
@@ -104,6 +112,7 @@ import br.com.joaoduartemariucio.rodaro.presentation.vehicles.detail.components.
 import br.com.joaoduartemariucio.rodaro.presentation.vehicles.form.VehicleFormDialog
 import br.com.joaoduartemariucio.rodaro.presentation.vehicles.form.VehicleFormViewModel
 import kotlinx.coroutines.launch
+import java.util.UUID
 
 private sealed interface DetailSheet {
     data object NewFuel : DetailSheet
@@ -119,6 +128,8 @@ private sealed interface DetailSheet {
     ) : DetailSheet
 
     data object FuelAdvisor : DetailSheet
+
+    data object HistoryReport : DetailSheet
 
     data object NewExpense : DetailSheet
 
@@ -146,6 +157,7 @@ private sealed interface DetailSheet {
 fun VehicleDetailScreen(
     vehicle: Vehicle,
     onBack: () -> Unit,
+    onOpenYearReview: (Vehicle) -> Unit = {},
 ) {
     val dependencies = LocalDependencies.current
     val viewModel =
@@ -160,14 +172,23 @@ fun VehicleDetailScreen(
                 dateProvider = dependencies.dateProvider,
                 reminders = dependencies.reminderSync,
                 analytics = dependencies.analytics,
+                fipeQuoteRepository = dependencies.fipeQuoteRepository,
+                fipeCatalog = dependencies.fipeCatalog,
+                backoff = dependencies.fipeRefreshBackoff,
+                regionalPriceSource = dependencies.regionalPriceSource,
             )
         }
     val coroutines = rememberCoroutineScope()
     var sheet by remember { mutableStateOf<DetailSheet?>(null) }
     var isRefreshing by remember { mutableStateOf(false) }
+    var showsMenu by remember { mutableStateOf(false) }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
-    LaunchedEffect(viewModel) { viewModel.load() }
+    LaunchedEffect(viewModel) {
+        viewModel.load()
+        launch { viewModel.refreshValuation() }
+        launch { viewModel.loadRegionalPrices() }
+    }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -181,6 +202,29 @@ fun VehicleDetailScreen(
                 actions = {
                     IconButton(onClick = { sheet = DetailSheet.EditVehicle(viewModel.rules) }) {
                         Icon(Icons.Filled.Edit, contentDescription = stringResource(R.string.edit_vehicle))
+                    }
+                    Box {
+                        IconButton(onClick = { showsMenu = true }) {
+                            Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.more_options))
+                        }
+                        DropdownMenu(expanded = showsMenu, onDismissRequest = { showsMenu = false }) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.review_menu)) },
+                                leadingIcon = { Icon(Icons.Filled.AutoGraph, contentDescription = null) },
+                                onClick = {
+                                    showsMenu = false
+                                    onOpenYearReview(viewModel.vehicle)
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.report_menu)) },
+                                leadingIcon = { Icon(Icons.Filled.PictureAsPdf, contentDescription = null) },
+                                onClick = {
+                                    showsMenu = false
+                                    sheet = DetailSheet.HistoryReport
+                                },
+                            )
+                        }
                     }
                 },
                 colors =
@@ -258,6 +302,8 @@ fun VehicleDetailScreen(
                 fuelCapability = viewModel.vehicle.fuelCapability,
                 suggestedPrices = viewModel.suggestedPrices,
                 suggestedFuelType = viewModel.suggestedFuelType,
+                regionalTable = viewModel.regionalTable,
+                uf = viewModel.vehicle.uf,
                 onSaved = reload,
                 onDismiss = dismiss,
             )
@@ -268,6 +314,8 @@ fun VehicleDetailScreen(
                 mode = FuelEntryFormViewModel.Mode.Edit(current.entry),
                 otherReadings = viewModel.odometerReadings(excluding = VehicleTimeline.Item.Fuel(current.entry)),
                 fuelCapability = viewModel.vehicle.fuelCapability,
+                regionalTable = viewModel.regionalTable,
+                uf = viewModel.vehicle.uf,
                 onSaved = reload,
                 onDismiss = dismiss,
             )
@@ -313,6 +361,10 @@ fun VehicleDetailScreen(
             ExpenseFormDialog(mode = ExpenseFormViewModel.Mode.Edit(current.expense), onSaved = reload, onDismiss = dismiss)
         }
 
+        DetailSheet.HistoryReport -> {
+            HistoryReportDialog(vehicle = viewModel.vehicle, onDismiss = dismiss)
+        }
+
         DetailSheet.FuelAdvisor -> {
             FuelAdvisorDialog(vehicle = viewModel.vehicle, fuel = viewModel.fuelEntries, onDismiss = dismiss)
         }
@@ -321,7 +373,7 @@ fun VehicleDetailScreen(
             VehicleFormDialog(
                 mode = VehicleFormViewModel.Mode.Edit(viewModel.vehicle),
                 existingRules = current.rules,
-                onSaved = reload,
+                onSaved = { coroutines.launch { viewModel.reloadAfterEdit() } },
                 onDismiss = dismiss,
             )
         }
@@ -367,10 +419,27 @@ private fun Loaded(
 ) {
     val stats = content.stats
     val zone = LocalDependencies.current.dateProvider.zone
+    val coroutines = rememberCoroutineScope()
     var showsPaidDues by remember { mutableStateOf(false) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 4.dp, bottom = 16.dp)) {
         item(key = "hero") { SectionCard(contentPadding = PaddingValues(0.dp)) { VehicleHeroCard(viewModel.vehicle, stats) } }
         item(key = "summary") { Box(Modifier.padding(top = 12.dp)) { VehicleSummaryCard(stats) } }
+
+        val fipe = viewModel.vehicle.fipe
+        if (fipe != null && viewModel.showsValuation) {
+            item(key = "fipe") {
+                SectionCard(Modifier.padding(top = 16.dp)) {
+                    FipeValueCard(
+                        selection = fipe,
+                        latest = viewModel.latestQuote,
+                        summary = stats.depreciation,
+                        status = viewModel.valuationStatus,
+                        zone = zone,
+                        onRetry = { coroutines.launch { viewModel.retryValuation() } },
+                    )
+                }
+            }
+        }
 
         item(key = "maintenance") {
             SectionHeader(stringResource(R.string.maintenance))
@@ -484,7 +553,7 @@ private fun Loaded(
                     SectionHeader(section.month.formattedMonthAndYear(), trailing = section.total.formattedCurrency)
                 }
                 items(section.items, key = { it.key }) { item ->
-                    HistoryRow(item, stats, onSheet, onDelete)
+                    HistoryRow(item, stats, viewModel.priceComparisons, onSheet, onDelete)
                 }
             }
         } else {
@@ -529,6 +598,7 @@ private fun DueRowSurface(
 private fun HistoryRow(
     item: VehicleTimeline.Item,
     stats: VehicleStats,
+    comparisons: Map<UUID, PriceComparison.Compared>,
     onSheet: (DetailSheet) -> Unit,
     onDelete: (VehicleTimeline.Item) -> Unit,
 ) {
@@ -549,9 +619,21 @@ private fun HistoryRow(
                         }.padding(horizontal = 16.dp, vertical = 10.dp),
                 ) {
                     when (item) {
-                        is VehicleTimeline.Item.Fuel -> FuelEntryRow(item.entry, stats.consumptionByEntry[item.entry.id])
-                        is VehicleTimeline.Item.Service -> ServiceEntryRow(item.entry)
-                        is VehicleTimeline.Item.Expense -> ExpenseRow(item.expense)
+                        is VehicleTimeline.Item.Fuel -> {
+                            FuelEntryRow(
+                                item.entry,
+                                stats.consumptionByEntry[item.entry.id],
+                                comparisons[item.entry.id],
+                            )
+                        }
+
+                        is VehicleTimeline.Item.Service -> {
+                            ServiceEntryRow(item.entry)
+                        }
+
+                        is VehicleTimeline.Item.Expense -> {
+                            ExpenseRow(item.expense)
+                        }
                     }
                 }
             }

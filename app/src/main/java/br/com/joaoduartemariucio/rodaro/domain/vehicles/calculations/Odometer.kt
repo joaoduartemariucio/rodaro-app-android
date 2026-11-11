@@ -26,10 +26,7 @@ object Odometer {
         at: Instant,
         samples: List<OdometerSample>,
     ): Double? {
-        val forward = mutableListOf<OdometerSample>()
-        for (sample in samples.sortedChronologically()) {
-            if (forward.isEmpty() || sample.odometer >= forward.last().odometer) forward += sample
-        }
+        val forward = forward(samples)
         val first = forward.firstOrNull() ?: return null
         if (at < first.date || at > forward.last().date) return null
 
@@ -40,6 +37,14 @@ object Odometer {
         val span = Duration.between(previous.date, next.date).toMillis().toDouble()
         val elapsed = Duration.between(previous.date, at).toMillis().toDouble()
         return previous.odometer + (next.odometer - previous.odometer) * elapsed / span
+    }
+
+    fun forward(samples: List<OdometerSample>): List<OdometerSample> {
+        val forward = mutableListOf<OdometerSample>()
+        for (sample in samples.sortedChronologically()) {
+            if (forward.isEmpty() || sample.odometer >= forward.last().odometer) forward += sample
+        }
+        return forward
     }
 
     fun samples(

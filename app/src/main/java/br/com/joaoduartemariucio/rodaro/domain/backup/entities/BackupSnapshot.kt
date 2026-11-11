@@ -10,6 +10,7 @@ import br.com.joaoduartemariucio.rodaro.domain.preferences.entities.LanguageOpti
 import br.com.joaoduartemariucio.rodaro.domain.preferences.entities.Preferences
 import br.com.joaoduartemariucio.rodaro.domain.preferences.entities.UnitSystem
 import br.com.joaoduartemariucio.rodaro.domain.trips.entities.SavedRoute
+import br.com.joaoduartemariucio.rodaro.domain.valuation.entities.FipeQuote
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.Vehicle
 import java.time.Instant
 
@@ -21,6 +22,7 @@ data class BackupSnapshot(
     val savedRoutes: List<SavedRoute> = emptyList(),
     val expenses: List<Expense> = emptyList(),
     val dueItems: List<DueItem> = emptyList(),
+    val fipeQuotes: List<FipeQuote> = emptyList(),
     val preferences: PortablePreferences? = null,
     val exportedAt: Instant? = null,
 ) {

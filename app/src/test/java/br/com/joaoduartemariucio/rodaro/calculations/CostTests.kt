@@ -4,8 +4,10 @@ import br.com.joaoduartemariucio.rodaro.domain.costs.calculations.Cost
 import br.com.joaoduartemariucio.rodaro.domain.costs.calculations.CostPeriod
 import br.com.joaoduartemariucio.rodaro.domain.costs.entities.ExpenseCategory
 import br.com.joaoduartemariucio.rodaro.domain.costs.entities.FineDetails
+import br.com.joaoduartemariucio.rodaro.domain.valuation.calculations.DepreciationSummary
 import org.junit.Test
 import java.math.BigDecimal
+import java.time.YearMonth
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
@@ -141,5 +143,38 @@ class CostTests {
         assertDecimal("0.24", summary.costPerKilometer)
         assertEquals(mapOf(ExpenseCategory.PEDAGIO to BigDecimal("30")), summary.byCategory)
         assertEquals(0.0, Cost.summary(records, emptyList(), period = CostPeriod(day(30), day(40)), zone = utc).distance)
+    }
+
+    @Test
+    fun `ownership cost adds depreciation without touching running cost or spending`() {
+        val base =
+            Cost.summary(
+                fuel = listOf(full(0, 1_000.0, 40.0, price = BigDecimal(5)), full(10, 1_400.0, 40.0, price = BigDecimal(5))),
+                services = emptyList(),
+            )
+        val depreciation =
+            DepreciationSummary(
+                start = quote(YearMonth.of(2026, 1), "90000"),
+                latest = quote(YearMonth.of(2026, 5), "88000"),
+                amount = BigDecimal("2000"),
+                months = 4,
+                kilometers = 4_000.0,
+                perMonth = BigDecimal("500"),
+                perKilometer = BigDecimal("0.5"),
+                purchasePrice = null,
+                purchaseVsLatest = null,
+                startsAtPurchase = false,
+            )
+        val summary = base.copy(depreciation = depreciation)
+
+        assertDecimal("400", summary.totalCost)
+        assertDecimal("400", summary.totalSpent)
+        assertDecimal("2400", summary.ownershipCost)
+        assertDecimal("1", summary.costPerKilometer)
+        assertDecimal("1.5", summary.ownershipCostPerKilometer)
+        assertNull(base.ownershipCostPerKilometer)
+        assertDecimal("400", base.ownershipCost)
+        assertNull(summary.copy(depreciation = depreciation.copy(perKilometer = null)).ownershipCostPerKilometer)
+        assertNull(Cost.summary(emptyList(), emptyList()).copy(depreciation = depreciation).ownershipCostPerKilometer)
     }
 }

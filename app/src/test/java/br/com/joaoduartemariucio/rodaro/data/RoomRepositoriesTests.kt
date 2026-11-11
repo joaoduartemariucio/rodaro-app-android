@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import br.com.joaoduartemariucio.rodaro.calculations.assertDecimal
 import br.com.joaoduartemariucio.rodaro.calculations.day
+import br.com.joaoduartemariucio.rodaro.calculations.quote
+import br.com.joaoduartemariucio.rodaro.calculations.selection
 import br.com.joaoduartemariucio.rodaro.data.common.repositories.persisting
 import br.com.joaoduartemariucio.rodaro.data.costs.repositories.RoomExpenseRepository
 import br.com.joaoduartemariucio.rodaro.data.database.RodaroDatabase
@@ -11,6 +13,7 @@ import br.com.joaoduartemariucio.rodaro.data.dues.repositories.RoomDueItemReposi
 import br.com.joaoduartemariucio.rodaro.data.fueling.repositories.RoomFuelEntryRepository
 import br.com.joaoduartemariucio.rodaro.data.maintenance.repositories.RoomServiceRepository
 import br.com.joaoduartemariucio.rodaro.data.trips.repositories.RoomRouteRepository
+import br.com.joaoduartemariucio.rodaro.data.valuation.repositories.RoomFipeQuoteRepository
 import br.com.joaoduartemariucio.rodaro.data.vehicles.repositories.RoomVehicleRepository
 import br.com.joaoduartemariucio.rodaro.domain.common.errors.RepositoryError
 import br.com.joaoduartemariucio.rodaro.domain.costs.entities.Expense
@@ -37,6 +40,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.math.BigDecimal
 import java.time.LocalDate
+import java.time.YearMonth
 import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -53,6 +57,7 @@ class RoomRepositoriesTests {
     private val routes = RoomRouteRepository(database.tripRoutes())
     private val expenses = RoomExpenseRepository(database.expenses(), database.vehicles())
     private val dues = RoomDueItemRepository(database.dueItems(), database.vehicles())
+    private val quotes = RoomFipeQuoteRepository(database.fipeQuotes(), database.vehicles())
 
     private val gol =
         Vehicle(name = "Gol", kind = VehicleKind.CAR, plate = "ABC1D23", initialOdometer = 1_000.0, tankCapacity = 55.0, createdAt = day(0))
@@ -340,6 +345,51 @@ class RoomRepositoriesTests {
             assertTrue(expenses.expenses(gol.id).isEmpty())
             assertTrue(dues.items(gol.id).isEmpty())
             assertEquals(listOf(license), dues.all())
+        }
+
+    @Test
+    fun `FIPE selection and purchase fields round-trip with an exact price`() =
+        runTest {
+            val bought = gol.copy(fipe = selection(), purchaseDate = LocalDate.of(2026, 3, 14), purchasePrice = BigDecimal("92500.50"))
+            vehicles.save(bought)
+
+            val stored = vehicles.vehicle(gol.id)
+
+            assertEquals(bought, stored)
+            assertEquals("92500.50", stored?.purchasePrice?.toPlainString())
+            vehicles.save(bought.copy(fipe = null, purchaseDate = null, purchasePrice = null))
+            assertNull(vehicles.vehicle(gol.id)?.fipe)
+        }
+
+    @Test
+    fun `FIPE quotes upsert by id, sort by month and need their vehicle`() =
+        runTest {
+            vehicles.save(gol)
+            val november = quote(YearMonth.of(2026, 11), "85386.00", vehicleId = gol.id)
+            val october = quote(YearMonth.of(2026, 10), "86000.00", vehicleId = gol.id)
+            quotes.save(listOf(november, october))
+            quotes.save(listOf(november.copy(price = BigDecimal("85000.10"), fetchedAt = day(3))))
+
+            val stored = quotes.quotes(gol.id)
+
+            assertEquals(listOf(YearMonth.of(2026, 10), YearMonth.of(2026, 11)), stored.map { it.month })
+            assertEquals("85000.10", stored.last().price.toPlainString())
+            assertEquals(day(3), stored.last().fetchedAt)
+            val missing = UUID.randomUUID()
+            assertIs<RepositoryError.VehicleNotFound>(
+                assertFailsWith<RepositoryError> { quotes.save(listOf(quote(YearMonth.of(2026, 1), "1", vehicleId = missing))) },
+            )
+        }
+
+    @Test
+    fun `deleting a vehicle removes its FIPE quotes`() =
+        runTest {
+            vehicles.save(gol)
+            quotes.save(listOf(quote(YearMonth.of(2026, 11), "85386.00", vehicleId = gol.id)))
+
+            database.openHelper.writableDatabase.execSQL("DELETE FROM vehicles WHERE id = '${gol.id}'")
+
+            assertTrue(quotes.quotes(gol.id).isEmpty())
         }
 
     private fun savedRoute(

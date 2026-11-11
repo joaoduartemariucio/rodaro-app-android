@@ -1,5 +1,7 @@
 package br.com.joaoduartemariucio.rodaro.presentation.dues.payment
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -58,22 +60,28 @@ fun DuePaymentDialog(
             onDismissRequest = onDismiss,
             title = { Text(stringResource(item.kind.label)) },
             text = {
-                Text(
-                    stringResource(
-                        R.string.due_next_year_prompt,
-                        suggestion.dueDate
-                            .atStartOfDay(zone)
-                            .toInstant()
-                            .formattedFullDate(zone),
-                    ),
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        stringResource(
+                            R.string.due_next_year_prompt,
+                            suggestion.dueDate
+                                .atStartOfDay(zone)
+                                .toInstant()
+                                .formattedFullDate(zone),
+                        ),
+                    )
+                    val failure = viewModel.state
+                    if (failure is FormState.Failed) FailureMessage(failure.error)
+                }
             },
             confirmButton = {
                 TextButton(onClick = {
                     coroutines.launch {
                         viewModel.acceptSuggestion()
-                        onChanged()
-                        onDismiss()
+                        if (viewModel.state == FormState.Saved) {
+                            onChanged()
+                            onDismiss()
+                        }
                     }
                 }) { Text(stringResource(R.string.due_next_year_create)) }
             },

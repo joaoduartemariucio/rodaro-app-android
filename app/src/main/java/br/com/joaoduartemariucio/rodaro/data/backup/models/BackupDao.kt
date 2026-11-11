@@ -10,6 +10,7 @@ import br.com.joaoduartemariucio.rodaro.data.fueling.models.FuelEntryModel
 import br.com.joaoduartemariucio.rodaro.data.maintenance.models.ServiceEntryModel
 import br.com.joaoduartemariucio.rodaro.data.maintenance.models.ServiceRuleModel
 import br.com.joaoduartemariucio.rodaro.data.trips.models.TripRouteModel
+import br.com.joaoduartemariucio.rodaro.data.valuation.models.FipeQuoteModel
 import br.com.joaoduartemariucio.rodaro.data.vehicles.models.VehicleModel
 
 data class BackupTables(
@@ -20,6 +21,7 @@ data class BackupTables(
     val tripRoutes: List<TripRouteModel>,
     val expenses: List<ExpenseModel> = emptyList(),
     val dueItems: List<DueItemModel> = emptyList(),
+    val fipeQuotes: List<FipeQuoteModel> = emptyList(),
 )
 
 @Dao
@@ -45,6 +47,9 @@ interface BackupDao {
     @Query("SELECT * FROM due_items ORDER BY dueDate, id")
     suspend fun dueItems(): List<DueItemModel>
 
+    @Query("SELECT * FROM fipe_quotes ORDER BY vehicleId, referenceMonth, id")
+    suspend fun fipeQuotes(): List<FipeQuoteModel>
+
     @Transaction
     suspend fun tables(): BackupTables =
         BackupTables(
@@ -55,6 +60,7 @@ interface BackupDao {
             tripRoutes = tripRoutes(),
             expenses = expenses(),
             dueItems = dueItems(),
+            fipeQuotes = fipeQuotes(),
         )
 
     @Query("DELETE FROM fuel_entries")
@@ -74,6 +80,9 @@ interface BackupDao {
 
     @Query("DELETE FROM due_items")
     suspend fun deleteDueItems()
+
+    @Query("DELETE FROM fipe_quotes")
+    suspend fun deleteFipeQuotes()
 
     @Query("DELETE FROM vehicles")
     suspend fun deleteVehicles()
@@ -99,6 +108,9 @@ interface BackupDao {
     @Insert
     suspend fun insertDueItems(models: List<DueItemModel>)
 
+    @Insert
+    suspend fun insertFipeQuotes(models: List<FipeQuoteModel>)
+
     @Transaction
     suspend fun replaceAll(tables: BackupTables) {
         deleteFuelEntries()
@@ -107,6 +119,7 @@ interface BackupDao {
         deleteTripRoutes()
         deleteDueItems()
         deleteExpenses()
+        deleteFipeQuotes()
         deleteVehicles()
         insertVehicles(tables.vehicles)
         insertFuelEntries(tables.fuelEntries)
@@ -115,5 +128,6 @@ interface BackupDao {
         insertTripRoutes(tables.tripRoutes)
         insertExpenses(tables.expenses)
         insertDueItems(tables.dueItems)
+        insertFipeQuotes(tables.fipeQuotes)
     }
 }

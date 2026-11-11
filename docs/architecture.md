@@ -43,15 +43,19 @@ graph LR
 ## Domain
 
 Plain data classes and pure functions with no Android dependency, grouped by feature:
-`vehicles/`, `fueling/`, `maintenance/`, `costs/`, `dues/`, `reminders/`, and `common/` for what every
-feature uses (calendar math, decimals, chronology, `DateProvider`, `RepositoryError`). Inside
+`vehicles/`, `fueling/`, `maintenance/`, `costs/`, `dues/`, `reminders/`, `valuation/` (FIPE),
+`reports/` (Retrospectiva and history PDF), and `common/` for what every feature uses (calendar
+math, decimals, chronology, `DateProvider`, `RepositoryError`, `RemoteDataError`). Inside
 each feature the usual folders: `entities/`, `repositories/` (interfaces), `calculations/`,
 `services/` (interfaces) and `errors/`, only the ones it needs.
 
 - **Entities** — `Vehicle` (with `FuelCapability`, UF and model year), `FuelEntry` (with
   `FuelType`/`FuelGroup` and `createdAt`), `ServiceEntry` (with workshop and `createdAt`),
   `ServiceRule`, `OdometerSample`, `Expense` (`ExpenseCategory`, `FineDetails`) in `costs/` and
-  `DueItem` (`DueKind`: IPVA, licenciamento, seguro, CNH) in `dues/`.
+  `DueItem` (`DueKind`: IPVA, licenciamento, seguro, CNH) in `dues/`, `FipeSelection` and
+  `FipeQuote` (one stored FIPE price per vehicle and reference month) in `valuation/`, and the
+  ANP `RegionalPriceTable` (state averages per week and fuel type) in `fueling/`. A vehicle may
+  carry a FIPE selection, a purchase date and a purchase price.
 - **Calculations** — one object per concern, each with its own tests:
   - `Consumption` — km/L per interval between two full tanks, the fuel group an interval
     qualifies for, `averageByGroup`, plus `anomalies(records)` (odometer going backwards or
@@ -73,10 +77,25 @@ each feature the usual folders: `entities/`, `repositories/` (interfaces), `calc
     km/L × price per liter, and cost per km.
   - `ReminderPlan` — when to notify for each rule: 9:00 on the due day, or the next 9:00 when
     overdue; plus `dueReminders` and `fineReminders`, every future stage of due items and unpaid fines.
+  - `Depreciation` (`valuation/`) — start and latest FIPE quote, depreciation (negative means
+    valorização), per month and per km after 3 months and 1,000 km, and `refreshPlan` (history
+    first, then the latest price at most once a month). `CostSummary` adds it as `ownershipCost`
+    and `ownershipCostPerKilometer`, apart from the running cost.
+  - `PriceComparisons` (`fueling/`) — a fill price against the ANP state average of its
+    Sunday–Saturday week (or the week before): below, average (±1 SD or ±2%) or above.
+  - `YearReviews` (`reports/`) — the Retrospectiva of one calendar year: distance interpolated at
+    January 1, cash spending, fuel summary, consumption per fuel group, accrual cost per km and the
+    minimums a year needs.
+  - `VehicleHistories` and `PlateMask` (`reports/`) — what the history PDF contains: odometer by
+    month, regressions, services with the "lançado retroativamente" flag, consumption, km per year,
+    and the opt-in costs, fuel log and full plate. Expenses are never an input.
   - `CalendarMath` — start of day, adding days and months, month start, days between: the
     `Calendar` operations of the iOS code, on `java.time` with an explicit `ZoneId`.
 - **Interfaces** — `VehicleRepository`, `FuelEntryRepository`, `ServiceRepository`,
-  `ExpenseRepository`, `DueItemRepository`, `DateProvider`, `ReminderScheduler`. Everything `suspend` and returning entities.
+  `ExpenseRepository`, `DueItemRepository`, `FipeQuoteRepository`, `DateProvider`,
+  `ReminderScheduler`, plus the remote sources `FipeCatalog` (with `UnavailableFipeCatalog` for
+  previews) and `RegionalPriceSource`, and `ReportFileStore`. Everything `suspend` and returning
+  entities; the remote ones throw `RemoteDataError`.
 - **Backup** (`backup/`) — `BackupSnapshot` (every table plus `PortablePreferences`),
   `BackupValidation` (repeated ids, records without their vehicle), `BackupError`, and the
   `BackupRepository`, `BackupCodec` and `DocumentStore` interfaces.
@@ -96,11 +115,21 @@ WorkManager; `database/` and `common/` hold what is shared.
   The schema is exported to `app/schemas/` so migrations can be checked. Version 6 added the
   `expenses` and `due_items` tables (a driver-license item has a null `vehicleId`, which skips the
   foreign key) and the new vehicle, fuel-up and service columns; `MIGRATION_5_6` is tested both
-  with raw SQL and by opening a migrated file with Room.
+  with raw SQL and by opening a migrated file with Room. Version 7 added the vehicle's FIPE and
+  purchase columns and the `fipe_quotes` table (`MIGRATION_6_7`, tested the same way, plus the
+  chain from 5).
 - **Mappers** — Room model ⇄ entity, in both directions.
 - **Repositories** — one Room repository per interface. Every call goes through `persisting`,
   which wraps storage exceptions in `RepositoryError.PersistenceFailed` and lets domain errors
   and cancellation through.
+- **Network** (`network/`) — Retrofit clients next to `OrsNetwork`: `FipeNetwork`/`FipeApi`
+  (parallelum FIPE v2, lists cached by OkHttp) and `AnpNetwork`/`AnpApi` (our
+  `rodaro.web.app/anp/precos-uf.json`), both on `PublicHttp`, with `remote {}` turning failures
+  into `RemoteDataError`. `valuation/services/FipeHttpCatalog` and
+  `fueling/services/CachedRegionalPriceSource` (file cache in `filesDir/anp`, at most one fetch a
+  day, stale copy on failure) implement the Domain interfaces.
+- **Reports** (`reports/services/`) — `AndroidReportFileStore` writes the PDF to the SAF document
+  the user picked, or to `cacheDir/reports/` for a `FileProvider` share.
 - **Services** — `SystemDateProvider` (`common/`), `WorkManagerReminderScheduler`, `ReminderWorker` (posts
   the notification) and `NotificationPermission` (bridges the runtime permission to the activity).
 - **Backup** (`backup/`) — `BackupDao` reads every table and replaces them in one transaction;
@@ -146,6 +175,15 @@ getters, exactly like computed properties on an `@Observable`.
   payment dialogs (`costs/form/`, `dues/form/`, `dues/payment/`). The driver's license lives in the
   Profile.
   Charts are drawn with Compose `Canvas` (`vehicles/detail/components/Charts.kt`).
+  `load()` only reads Room; right after it the screen launches `refreshValuation()` (FIPE card,
+  `FipeValueCard`) and `loadRegionalPrices()` (ANP badge on each fuel-up) in parallel, and their
+  failures are soft. The top bar's overflow menu opens the Retrospectiva and the history PDF
+  dialog. The vehicle form opens `vehicles/form/fipe/FipePickerDialog` (brand → model → year).
+- **Retrospectiva** (`vehicles/review/`) — `YearReviewViewModel` loads the records once and
+  recomputes `YearReviews` per selected year; `YearReviewScreen` hides sections without data.
+- **History PDF** (`reports/`) — `HistoryReportViewModel` builds `VehicleHistory`, turns it into a
+  plain `ReportDocument` (`HistoryReportContent`), paginates it (`pdf/ReportLayout`, pure) and draws
+  it with `PdfReportRenderer` (`android.graphics.pdf.PdfDocument`).
 - **Reminders** — `ServiceReminderSync` re-plans notifications at the end of the
   list and detail `load()` and after a driver-license change in the Profile: it gathers each
   active vehicle's records, asks `ReminderPlan` (Domain) for service, due-item and fine reminders
@@ -166,7 +204,7 @@ One main host, and each feature owns its own routes and entries:
   `back()` never empties the start tab, and tapping the current tab pops it to its root.
 - `presentation/<feature>/navigation/` — the feature's `…Route` sealed interface and a
   `…Entries(navigator)` extension on `EntryProviderScope<Route>` that maps each route to its
-  screen. Vehicles: `VehiclesRoute` (`VehicleList`, `ArchivedVehicles`, `VehicleDetail`) in
+  screen. Vehicles: `VehiclesRoute` (`VehicleList`, `ArchivedVehicles`, `VehicleDetail`, `YearReview`) in
   `vehiclesEntries`; Trips: `TripsRoute.TripCost` in `tripsEntries`; Profile: `ProfileRoute.Profile`,
   `ProfileRoute.Auth`, `ProfileRoute.Preferences` and `ProfileRoute.Backup` in `profileEntries`. Forms stay dialogs
   opened by their screen, not destinations.
@@ -208,6 +246,13 @@ and maps models to entities → ViewModel runs Domain calculations (`VehicleStat
 
 **Write:** form builds an entity → repository upserts the model → dialog dismisses → parent
 ViewModel reloads.
+
+## Outside the app
+
+`scripts/anp_prices.py` and `.github/workflows/anp-prices.yml` build the ANP state averages that
+the app downloads: weekly, from ANP's spreadsheets, merged into the published JSON and deployed to
+Firebase Hosting without touching git. See [decisions](decisions.md#anp-averages-are-published-by-our-own-weekly-job)
+and [CI](ci.md#anp-prices).
 
 ## Enforcement
 

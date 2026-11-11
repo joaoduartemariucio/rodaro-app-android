@@ -1,6 +1,9 @@
 package br.com.joaoduartemariucio.rodaro.domain.vehicles.entities
 
+import br.com.joaoduartemariucio.rodaro.domain.valuation.entities.FipeSelection
+import java.math.BigDecimal
 import java.time.Instant
+import java.time.LocalDate
 import java.util.UUID
 
 data class Vehicle(
@@ -15,6 +18,9 @@ data class Vehicle(
     val fuelCapability: FuelCapability = FuelCapability.FLEX,
     val uf: String? = null,
     val modelYear: Int? = null,
+    val fipe: FipeSelection? = null,
+    val purchaseDate: LocalDate? = null,
+    val purchasePrice: BigDecimal? = null,
 ) {
     companion object {
         val UF_CODES: List<String> =

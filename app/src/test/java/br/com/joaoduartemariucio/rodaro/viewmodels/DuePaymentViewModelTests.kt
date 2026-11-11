@@ -162,6 +162,7 @@ class DuePaymentViewModelTests {
             viewModel.acceptSuggestion()
 
             assertIs<FormState.Failed>(viewModel.state)
+            assertNotNull(viewModel.suggestion)
         }
 
     @Test

@@ -21,6 +21,8 @@ import br.com.joaoduartemariucio.rodaro.domain.preferences.entities.CurrencyOpti
 import br.com.joaoduartemariucio.rodaro.domain.preferences.entities.LanguageOption
 import br.com.joaoduartemariucio.rodaro.domain.preferences.entities.UnitSystem
 import br.com.joaoduartemariucio.rodaro.domain.trips.entities.SavedRoute
+import br.com.joaoduartemariucio.rodaro.domain.valuation.entities.FipeQuote
+import br.com.joaoduartemariucio.rodaro.domain.valuation.entities.FipeSelection
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.FuelCapability
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.Vehicle
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.VehicleKind
@@ -36,6 +38,7 @@ import java.math.BigDecimal
 import java.time.DateTimeException
 import java.time.Instant
 import java.time.LocalDate
+import java.time.YearMonth
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -87,6 +90,7 @@ class JsonBackupCodec(
             savedRoutes = file.savedRoutes.map(::savedRoute),
             expenses = file.expenses.map(::expense),
             dueItems = file.dueItems.mapNotNull(::dueItem),
+            fipeQuotes = file.fipeQuotes.mapNotNull(::fipeQuote),
             preferences = file.preferences?.let(::preferences),
             exportedAt = file.exportedAt?.let(Instant::parse),
         )
@@ -105,6 +109,7 @@ class JsonBackupCodec(
             savedRoutes = snapshot.savedRoutes.map(::savedRouteDto),
             expenses = snapshot.expenses.map(::expenseDto),
             dueItems = snapshot.dueItems.map(::dueItemDto),
+            fipeQuotes = snapshot.fipeQuotes.map(::fipeQuoteDto),
             preferences = snapshot.preferences?.let(::preferencesDto),
         )
 
@@ -121,6 +126,9 @@ class JsonBackupCodec(
             fuelCapability = vehicle.fuelCapability.rawValue,
             uf = vehicle.uf,
             modelYear = vehicle.modelYear,
+            fipe = vehicle.fipe?.let { FipeSelectionDto(it.fipeCode, it.yearCode, it.brandName, it.modelName, it.yearName) },
+            purchaseDate = vehicle.purchaseDate?.toString(),
+            purchasePrice = vehicle.purchasePrice?.toPlainString(),
         )
 
     private fun vehicle(dto: VehicleDto) =
@@ -136,6 +144,9 @@ class JsonBackupCodec(
             fuelCapability = FuelCapability.of(dto.fuelCapability),
             uf = dto.uf,
             modelYear = dto.modelYear,
+            fipe = dto.fipe?.let { FipeSelection(it.code, it.yearCode, it.brand, it.model, it.year) },
+            purchaseDate = dto.purchaseDate?.let(LocalDate::parse),
+            purchasePrice = dto.purchasePrice?.let(::BigDecimal),
         )
 
     private fun fuelEntryDto(entry: FuelEntry) =
@@ -274,6 +285,31 @@ class JsonBackupCodec(
             installmentCount = dto.installmentCount,
             note = dto.note,
             createdAt = Instant.parse(dto.createdAt),
+        )
+    }
+
+    private fun fipeQuoteDto(quote: FipeQuote) =
+        FipeQuoteDto(
+            id = quote.id.toString(),
+            vehicleId = quote.vehicleId.toString(),
+            fipeCode = quote.fipeCode,
+            yearCode = quote.yearCode,
+            month = quote.month.toString(),
+            price = quote.price.toPlainString(),
+            fetchedAt = instantText(quote.fetchedAt),
+        )
+
+    private fun fipeQuote(dto: FipeQuoteDto): FipeQuote? {
+        val month = runCatching { YearMonth.parse(dto.month) }.getOrNull() ?: return null
+        val price = dto.price.toBigDecimalOrNull() ?: return null
+        return FipeQuote(
+            id = UUID.fromString(dto.id),
+            vehicleId = UUID.fromString(dto.vehicleId),
+            fipeCode = dto.fipeCode,
+            yearCode = dto.yearCode,
+            month = month,
+            price = price,
+            fetchedAt = Instant.parse(dto.fetchedAt),
         )
     }
 

@@ -28,7 +28,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import br.com.joaoduartemariucio.rodaro.R
 import br.com.joaoduartemariucio.rodaro.app.LocalDependencies
+import br.com.joaoduartemariucio.rodaro.domain.fueling.calculations.PriceComparison
 import br.com.joaoduartemariucio.rodaro.domain.fueling.entities.FuelType
+import br.com.joaoduartemariucio.rodaro.domain.fueling.entities.RegionalPriceTable
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.FuelCapability
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.OdometerSample
 import br.com.joaoduartemariucio.rodaro.presentation.common.DateField
@@ -43,16 +45,20 @@ import br.com.joaoduartemariucio.rodaro.presentation.common.SectionCard
 import br.com.joaoduartemariucio.rodaro.presentation.common.SectionDivider
 import br.com.joaoduartemariucio.rodaro.presentation.common.SectionFooter
 import br.com.joaoduartemariucio.rodaro.presentation.common.SectionHeader
+import br.com.joaoduartemariucio.rodaro.presentation.common.UnitConversion
 import br.com.joaoduartemariucio.rodaro.presentation.common.ValidationFooter
 import br.com.joaoduartemariucio.rodaro.presentation.common.ads.InterstitialAds
 import br.com.joaoduartemariucio.rodaro.presentation.common.distanceUnit
 import br.com.joaoduartemariucio.rodaro.presentation.common.formattedCurrency
+import br.com.joaoduartemariucio.rodaro.presentation.common.formattedPerLiter
 import br.com.joaoduartemariucio.rodaro.presentation.common.label
+import br.com.joaoduartemariucio.rodaro.presentation.common.rememberLocalizer
 import br.com.joaoduartemariucio.rodaro.presentation.common.volumePriceTitle
 import br.com.joaoduartemariucio.rodaro.presentation.common.volumeTitle
 import br.com.joaoduartemariucio.rodaro.presentation.common.volumeUnit
 import kotlinx.coroutines.launch
 import java.math.BigDecimal
+import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -65,6 +71,8 @@ fun FuelEntryFormDialog(
     fuelCapability: FuelCapability = FuelCapability.FLEX,
     suggestedPrices: Map<FuelType, BigDecimal> = emptyMap(),
     suggestedFuelType: FuelType? = null,
+    regionalTable: RegionalPriceTable? = null,
+    uf: String? = null,
 ) {
     val dependencies = LocalDependencies.current
     val viewModel =
@@ -79,6 +87,8 @@ fun FuelEntryFormDialog(
                 fuelCapability = fuelCapability,
                 suggestedPrices = suggestedPrices,
                 suggestedFuelType = suggestedFuelType,
+                regionalTable = regionalTable,
+                uf = uf,
             )
         }
     val coroutines = rememberCoroutineScope()
@@ -175,6 +185,7 @@ fun FuelEntryFormDialog(
                     )
                 }
             }
+            viewModel.priceComparison?.let { comparison -> SectionFooter { RegionalPriceHint(comparison) } }
         }
 
         item {
@@ -203,3 +214,41 @@ fun FuelEntryFormDialog(
         }
     }
 }
+
+@Composable
+private fun RegionalPriceHint(comparison: PriceComparison) {
+    val localizer = rememberLocalizer()
+    val text =
+        when (comparison) {
+            is PriceComparison.Unavailable -> {
+                if (comparison.reason == PriceComparison.Reason.NO_UF) stringResource(R.string.anp_no_uf_hint) else return
+            }
+
+            is PriceComparison.Compared -> {
+                val level =
+                    when (comparison.level) {
+                        PriceComparison.Level.BELOW -> stringResource(R.string.anp_below, comparison.uf)
+                        PriceComparison.Level.AVERAGE -> stringResource(R.string.anp_average, comparison.uf)
+                        PriceComparison.Level.ABOVE -> stringResource(R.string.anp_above, comparison.uf)
+                    }
+                val previous = if (comparison.isPreviousWeek) " ${stringResource(R.string.anp_previous_week)}" else ""
+                val average =
+                    stringResource(
+                        R.string.anp_state_average,
+                        comparison.uf,
+                        comparison.regional.mean.formattedPerLiter(localizer),
+                        UnitConversion.perVolume(comparison.tolerance).formattedCurrency,
+                    )
+                val week =
+                    stringResource(
+                        R.string.anp_source,
+                        comparison.week.start.format(WEEK_FORMAT),
+                        comparison.week.end.format(WEEK_FORMAT),
+                    )
+                "$level$previous · $average\n$week"
+            }
+        }
+    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+}
+
+private val WEEK_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("dd/MM")

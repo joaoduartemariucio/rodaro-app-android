@@ -13,6 +13,9 @@ import br.com.joaoduartemariucio.rodaro.domain.maintenance.calculations.ServiceD
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.entities.ServiceKind
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.entities.ServiceRule
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.repositories.ServiceRepository
+import br.com.joaoduartemariucio.rodaro.domain.valuation.entities.FipeDetail
+import br.com.joaoduartemariucio.rodaro.domain.valuation.entities.FipePrice
+import br.com.joaoduartemariucio.rodaro.domain.valuation.entities.FipeSelection
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.FuelCapability
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.Vehicle
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.VehicleKind
@@ -22,6 +25,8 @@ import br.com.joaoduartemariucio.rodaro.presentation.common.NumberInput
 import br.com.joaoduartemariucio.rodaro.presentation.common.UnitConversion
 import br.com.joaoduartemariucio.rodaro.presentation.common.ValidationIssue
 import br.com.joaoduartemariucio.rodaro.presentation.common.blocksSaving
+import java.math.BigDecimal
+import java.time.LocalDate
 import java.util.UUID
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -131,6 +136,7 @@ class VehicleFormViewModel(
     var kind: VehicleKind
         get() = selectedKind
         set(value) {
+            if (value != selectedKind) clearFipe()
             selectedKind = value
             if (fuelCapability !in FuelCapability.available(value)) fuelCapability = FuelCapability.FLEX
             rules.forEach { it.applySuggestion(value) }
@@ -144,6 +150,12 @@ class VehicleFormViewModel(
             modelYearText = value.filter { it in '0'..'9' }.take(MODEL_YEAR_DIGITS)
         }
     var plate by mutableStateOf("")
+    var fipe: FipeSelection? by mutableStateOf(null)
+        private set
+    var fipePreviewPrice: FipePrice? by mutableStateOf(null)
+        private set
+    var purchaseDate: LocalDate? by mutableStateOf(null)
+    var purchasePrice by mutableStateOf("")
     var initialOdometer by mutableStateOf("")
     var tankCapacity by mutableStateOf("")
     val rules = mutableStateListOf<RuleDraft>()
@@ -162,6 +174,9 @@ class VehicleFormViewModel(
             fuelCapability = vehicle.fuelCapability
             uf = vehicle.uf
             modelYear = vehicle.modelYear?.toString().orEmpty()
+            fipe = vehicle.fipe
+            purchaseDate = vehicle.purchaseDate
+            purchasePrice = NumberInput.text(vehicle.purchasePrice, NumberInput.Style.MONEY)
         }
         rules.addAll(existingRules.sortedBy { it.kind.rawValue }.map(::RuleDraft))
     }
@@ -180,6 +195,26 @@ class VehicleFormViewModel(
 
     val parsedModelYear: Int? get() = modelYear.toIntOrNull()
 
+    val parsedPurchasePrice: BigDecimal? get() = NumberInput.decimal(purchasePrice, NumberInput.Style.MONEY)
+
+    val today: LocalDate get() = dateProvider.now.atZone(dateProvider.zone).toLocalDate()
+
+    fun applyFipe(detail: FipeDetail) {
+        fipe = detail.selection
+        fipePreviewPrice = detail.price
+        if (modelYear.isEmpty()) {
+            modelYear =
+                detail.selection.modelYear
+                    ?.toString()
+                    .orEmpty()
+        }
+    }
+
+    fun clearFipe() {
+        fipe = null
+        fipePreviewPrice = null
+    }
+
     private val modelYearRange: IntRange
         get() = MIN_MODEL_YEAR..(dateProvider.now.atZone(dateProvider.zone).year + 1)
 
@@ -190,6 +225,8 @@ class VehicleFormViewModel(
                 val year = parsedModelYear
                 val range = modelYearRange
                 if (year != null && year !in range) add(ValidationIssue.ModelYearOutOfRange(range.first, range.last))
+                if (purchaseDate?.isAfter(today) == true) add(ValidationIssue.PurchaseDateInFuture)
+                if (parsedPurchasePrice?.let { it.signum() <= 0 } == true) add(ValidationIssue.PurchasePriceNotPositive)
                 addAll(rules.flatMap { it.issues })
             }
 
@@ -269,6 +306,9 @@ class VehicleFormViewModel(
                     fuelCapability = fuelCapability,
                     uf = uf,
                     modelYear = parsedModelYear,
+                    fipe = fipe,
+                    purchaseDate = purchaseDate,
+                    purchasePrice = parsedPurchasePrice,
                 )
             }
 
@@ -282,6 +322,9 @@ class VehicleFormViewModel(
                     fuelCapability = fuelCapability,
                     uf = uf,
                     modelYear = parsedModelYear,
+                    fipe = fipe,
+                    purchaseDate = purchaseDate,
+                    purchasePrice = parsedPurchasePrice,
                 )
             }
         }

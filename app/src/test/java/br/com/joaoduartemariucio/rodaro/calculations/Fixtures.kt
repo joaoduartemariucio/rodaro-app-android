@@ -10,10 +10,13 @@ import br.com.joaoduartemariucio.rodaro.domain.fueling.entities.FuelType
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.entities.ServiceEntry
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.entities.ServiceKind
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.entities.ServiceRule
+import br.com.joaoduartemariucio.rodaro.domain.valuation.entities.FipeQuote
+import br.com.joaoduartemariucio.rodaro.domain.valuation.entities.FipeSelection
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.OdometerSample
 import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
+import java.time.YearMonth
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.util.UUID
@@ -125,4 +128,26 @@ fun dueItem(
         amount = amount?.let(::BigDecimal),
         paidAt = paidAt,
         createdAt = day(0),
+    )
+
+fun selection(
+    fipeCode: String = "005340-6",
+    yearCode: String = "2014-3",
+): FipeSelection = FipeSelection(fipeCode, yearCode, "VW - VolksWagen", "Amarok CD 2.0 16V TDI 4x4 Diesel", "2014 Diesel")
+
+fun quote(
+    month: YearMonth,
+    price: String,
+    fetchedAt: Instant = month.atDay(1).atStartOfDay(utc).toInstant(),
+    selection: FipeSelection = selection(),
+    vehicleId: UUID = testVehicleId,
+): FipeQuote =
+    FipeQuote(
+        id = FipeQuote.id(vehicleId, selection.fipeCode, selection.yearCode, month),
+        vehicleId = vehicleId,
+        fipeCode = selection.fipeCode,
+        yearCode = selection.yearCode,
+        month = month,
+        price = BigDecimal(price),
+        fetchedAt = fetchedAt,
     )

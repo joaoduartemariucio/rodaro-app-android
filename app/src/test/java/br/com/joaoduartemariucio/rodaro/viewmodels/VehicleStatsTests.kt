@@ -6,6 +6,7 @@ import br.com.joaoduartemariucio.rodaro.calculations.day
 import br.com.joaoduartemariucio.rodaro.calculations.expense
 import br.com.joaoduartemariucio.rodaro.calculations.full
 import br.com.joaoduartemariucio.rodaro.calculations.partial
+import br.com.joaoduartemariucio.rodaro.calculations.quote
 import br.com.joaoduartemariucio.rodaro.calculations.rule
 import br.com.joaoduartemariucio.rodaro.calculations.sample
 import br.com.joaoduartemariucio.rodaro.calculations.service
@@ -22,6 +23,7 @@ import br.com.joaoduartemariucio.rodaro.domain.maintenance.calculations.ServiceD
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.entities.ServiceEntry
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.entities.ServiceKind
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.entities.ServiceRule
+import br.com.joaoduartemariucio.rodaro.domain.valuation.calculations.DepreciationSummary
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.Vehicle
 import br.com.joaoduartemariucio.rodaro.fakes.TestLocalizer
 import br.com.joaoduartemariucio.rodaro.presentation.common.color
@@ -37,6 +39,7 @@ import br.com.joaoduartemariucio.rodaro.presentation.vehicles.VehicleStats
 import br.com.joaoduartemariucio.rodaro.presentation.vehicles.detail.VehicleTimeline
 import org.junit.Test
 import java.math.BigDecimal
+import java.time.YearMonth
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
@@ -216,5 +219,28 @@ class VehicleStatsTests {
                 listOf(localizer.plural(R.plurals.relative_in_days, 1, 1), localizer.plural(R.plurals.relative_days_ago, 1, 1)),
         )
         assertFalse(day(0).formattedShortMonth().isEmpty())
+    }
+
+    @Test
+    fun `depreciation is passed through to the cost summary`() {
+        val depreciation =
+            DepreciationSummary(
+                start = quote(YearMonth.of(2026, 1), "90000"),
+                latest = quote(YearMonth.of(2026, 5), "88000"),
+                amount = BigDecimal("2000"),
+                months = 4,
+                kilometers = 4_000.0,
+                perMonth = BigDecimal("500"),
+                perKilometer = BigDecimal("0.5"),
+                purchasePrice = null,
+                purchaseVsLatest = null,
+                startsAtPurchase = false,
+            )
+
+        val stats = VehicleStats(vehicle, listOf(full(0, 1_000.0, 40.0), full(10, 1_400.0, 40.0)), emptyList(), now = day(10), zone = utc, depreciation = depreciation)
+
+        assertEquals(depreciation, stats.depreciation)
+        assertEquals(depreciation, stats.cost.depreciation)
+        assertDecimal("2400", stats.cost.ownershipCost)
     }
 }

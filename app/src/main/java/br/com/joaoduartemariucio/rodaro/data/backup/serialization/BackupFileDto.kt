@@ -15,6 +15,7 @@ data class BackupFileDto(
     val savedRoutes: List<SavedRouteDto> = emptyList(),
     val expenses: List<ExpenseDto> = emptyList(),
     val dueItems: List<DueItemDto> = emptyList(),
+    val fipeQuotes: List<FipeQuoteDto> = emptyList(),
     val preferences: PreferencesDto? = null,
 )
 
@@ -37,6 +38,29 @@ data class VehicleDto(
     val fuelCapability: String = "flex",
     val uf: String? = null,
     val modelYear: Int? = null,
+    val fipe: FipeSelectionDto? = null,
+    val purchaseDate: String? = null,
+    val purchasePrice: String? = null,
+)
+
+@Serializable
+data class FipeSelectionDto(
+    val code: String,
+    val yearCode: String,
+    val brand: String,
+    val model: String,
+    val year: String,
+)
+
+@Serializable
+data class FipeQuoteDto(
+    val id: String,
+    val vehicleId: String,
+    val fipeCode: String,
+    val yearCode: String,
+    val month: String,
+    val price: String,
+    val fetchedAt: String,
 )
 
 @Serializable

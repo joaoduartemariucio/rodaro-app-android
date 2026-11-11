@@ -12,6 +12,7 @@ import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.VehicleKind
 import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
+import java.time.YearMonth
 import java.util.UUID
 
 class Converters {
@@ -86,4 +87,10 @@ class Converters {
 
     @TypeConverter
     fun dueKindText(value: DueKind): String = value.rawValue
+
+    @TypeConverter
+    fun yearMonth(value: String): YearMonth = YearMonth.parse(value)
+
+    @TypeConverter
+    fun yearMonthText(value: YearMonth): String = value.toString()
 }

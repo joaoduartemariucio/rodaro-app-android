@@ -16,6 +16,7 @@ import br.com.joaoduartemariucio.rodaro.domain.maintenance.calculations.Maintena
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.calculations.ServiceDue
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.entities.ServiceEntry
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.entities.ServiceRule
+import br.com.joaoduartemariucio.rodaro.domain.valuation.calculations.DepreciationSummary
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.calculations.Odometer
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.Vehicle
 import br.com.joaoduartemariucio.rodaro.presentation.common.Localizer
@@ -34,6 +35,7 @@ class VehicleStats(
     now: Instant,
     zone: ZoneId = ZoneId.systemDefault(),
     expenses: List<Expense> = emptyList(),
+    val depreciation: DepreciationSummary? = null,
 ) {
     data class ServiceDueItem(
         val due: ServiceDue,
@@ -74,7 +76,7 @@ class VehicleStats(
         consumptionHistory = intervals
         consumptionByEntry = consumptionByEntry(fuel, intervals)
         kilometersPerMonth = Maintenance.averageKilometersPerMonth(samples)
-        cost = Cost.summary(fuel, services, expenses, samples, null, zone)
+        cost = Cost.summary(fuel, services, expenses, samples, null, zone).copy(depreciation = depreciation)
         lastPricePerLiter = fuel.sortedChronologically().lastOrNull()?.pricePerLiter
 
         val monthStart = now.monthStart(zone)

@@ -3,6 +3,7 @@ package br.com.joaoduartemariucio.rodaro.presentation.common
 import br.com.joaoduartemariucio.rodaro.R
 import br.com.joaoduartemariucio.rodaro.domain.backup.errors.BackupError
 import br.com.joaoduartemariucio.rodaro.domain.common.errors.AccountError
+import br.com.joaoduartemariucio.rodaro.domain.common.errors.RemoteDataError
 import br.com.joaoduartemariucio.rodaro.domain.common.errors.RepositoryError
 
 fun Throwable.message(localizer: Localizer): String =
@@ -28,5 +29,9 @@ fun Throwable.message(localizer: Localizer): String =
         is BackupError.TooLarge -> localizer.string(R.string.error_backup_too_large)
         is BackupError.Storage -> localizer.string(R.string.error_backup_storage)
         is AccountError.Failed -> localizer.string(R.string.error_account_failed)
+        is RemoteDataError.NetworkUnavailable -> localizer.string(R.string.error_remote_network)
+        is RemoteDataError.QuotaExceeded -> localizer.string(R.string.error_remote_quota)
+        is RemoteDataError.NotFound -> localizer.string(R.string.error_remote_not_found)
+        is RemoteDataError.Unreadable, is RemoteDataError.RequestFailed -> localizer.string(R.string.error_remote_failed)
         else -> localizedMessage ?: localizer.string(R.string.error_persistence_failed)
     }

@@ -345,4 +345,61 @@ class JsonBackupCodecTests {
 
             assertFailsWith<BackupError.Unreadable> { codec.decode(replacing("dueItems", items)) }
         }
+
+    @Test
+    fun `FIPE selection, purchase and quotes round trip as optional version 2 keys`() =
+        runTest {
+            val original = BackupFixtures.fipeSnapshot()
+
+            val text = codec.encode(original)
+            val decoded = codec.decode(text)
+
+            assertEquals(original, decoded)
+            val root = Json.parseToJsonElement(text).jsonObject
+            assertEquals(
+                2,
+                root
+                    .getValue("formatVersion")
+                    .jsonPrimitive.content
+                    .toInt(),
+            )
+            assertEquals("2026-11", root.first("fipeQuotes").text("month"))
+            assertEquals("85386.00", root.first("fipeQuotes").text("price"))
+            assertEquals("92500.50", root.first("vehicles").text("purchasePrice"))
+            assertEquals(
+                "005340-6",
+                root
+                    .first("vehicles")
+                    .getValue("fipe")
+                    .jsonObject
+                    .text("code"),
+            )
+        }
+
+    @Test
+    fun `the version 2 golden file has no FIPE data`() =
+        runTest {
+            val decoded = codec.decode(requireNotNull(javaClass.getResource("/backup/v2.json")).readText())
+
+            assertTrue(decoded.vehicles.all { it.fipe == null && it.purchaseDate == null && it.purchasePrice == null })
+            assertTrue(decoded.fipeQuotes.isEmpty())
+        }
+
+    @Test
+    fun `a quote with a bad month or price is dropped without failing the file`() =
+        runTest {
+            val vehicle = "11111111-1111-4111-8111-111111111111"
+            val quote = { id: String, month: String, price: String ->
+                """{"id":"$id","vehicleId":"$vehicle","fipeCode":"1","yearCode":"2014-1","month":"$month","price":"$price","fetchedAt":"2026-11-01T00:00:00Z"}"""
+            }
+            val text =
+                """{"format":"rodaro.backup","formatVersion":2,"fipeQuotes":[""" +
+                    quote("33333333-3333-4333-8333-333333333333", "2026-13", "1") + "," +
+                    quote("44444444-4444-4444-8444-444444444444", "2026-10", "abc") + "," +
+                    quote("55555555-5555-4555-8555-555555555555", "2026-10", "86000.00") + "]}"
+
+            val decoded = codec.decode(text)
+
+            assertEquals(listOf("55555555-5555-4555-8555-555555555555"), decoded.fipeQuotes.map { it.id.toString() })
+        }
 }

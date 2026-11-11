@@ -22,6 +22,8 @@ import br.com.joaoduartemariucio.rodaro.domain.trips.entities.RouteEstimate
 import br.com.joaoduartemariucio.rodaro.domain.trips.entities.SavedRoute
 import br.com.joaoduartemariucio.rodaro.domain.trips.repositories.RouteRepository
 import br.com.joaoduartemariucio.rodaro.domain.trips.services.RouteEstimateProvider
+import br.com.joaoduartemariucio.rodaro.domain.valuation.entities.FipeQuote
+import br.com.joaoduartemariucio.rodaro.domain.valuation.repositories.FipeQuoteRepository
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.Vehicle
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.VehicleKind
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.repositories.VehicleRepository
@@ -299,5 +301,24 @@ class InMemoryRouteRepository(
 
     override suspend fun delete(id: UUID) {
         storage.remove(id)
+    }
+}
+
+class InMemoryFipeQuoteRepository(
+    quotes: List<FipeQuote> = emptyList(),
+    var failure: Exception? = null,
+) : FipeQuoteRepository {
+    private val storage = quotes.associateBy { it.id }.toMutableMap()
+
+    val all: List<FipeQuote> get() = storage.values.sortedBy { it.month }
+
+    override suspend fun quotes(vehicleId: UUID): List<FipeQuote> {
+        failure?.let { throw it }
+        return storage.values.filter { it.vehicleId == vehicleId }.sortedBy { it.month }
+    }
+
+    override suspend fun save(quotes: List<FipeQuote>) {
+        failure?.let { throw it }
+        quotes.forEach { storage[it.id] = it }
     }
 }

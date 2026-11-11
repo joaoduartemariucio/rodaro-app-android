@@ -30,6 +30,10 @@ app/src/main/java/*/presentation/common/KeyboardDismissal.kt
 app/src/main/java/*/presentation/common/Localizer.kt
 app/src/main/java/*/presentation/common/UnitLabels.kt
 
+# PDF drawing on android.graphics.pdf.PdfDocument: native, not runnable under Robolectric.
+# The pagination it draws (ReportLayout) and the content (HistoryReportContent) are tested.
+app/src/main/java/*/presentation/reports/pdf/PdfReportRenderer.kt
+
 # Fixtures for Compose previews and the debug seeder
 app/src/main/java/*/data/PreviewData.kt
 

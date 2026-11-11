@@ -6,6 +6,9 @@ import br.com.joaoduartemariucio.rodaro.domain.maintenance.entities.ServiceKind
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.entities.ServiceRule
 import br.com.joaoduartemariucio.rodaro.domain.preferences.entities.Preferences
 import br.com.joaoduartemariucio.rodaro.domain.preferences.entities.UnitSystem
+import br.com.joaoduartemariucio.rodaro.domain.valuation.entities.FipeDetail
+import br.com.joaoduartemariucio.rodaro.domain.valuation.entities.FipePrice
+import br.com.joaoduartemariucio.rodaro.domain.valuation.entities.FipeSelection
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.FuelCapability
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.Vehicle
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.VehicleKind
@@ -21,6 +24,8 @@ import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Test
 import java.math.BigDecimal
+import java.time.LocalDate
+import java.time.YearMonth
 import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -368,4 +373,82 @@ class VehicleFormViewModelTests {
             assertEquals(FuelCapability.DIESEL, edited.fuelCapability)
             assertEquals(2000, edited.modelYear)
         }
+
+    private val detail =
+        FipeDetail(
+            FipeSelection("005340-6", "2014-3", "VW - VolksWagen", "Amarok", "2014 Diesel"),
+            FipePrice(YearMonth.of(2026, 11), BigDecimal("85386.00")),
+        )
+
+    @Test
+    fun `applying a FIPE choice fills the model year only when it is empty`() {
+        val viewModel = makeViewModel()
+        viewModel.applyFipe(detail)
+
+        assertEquals(detail.selection, viewModel.fipe)
+        assertEquals(detail.price, viewModel.fipePreviewPrice)
+        assertEquals("2014", viewModel.modelYear)
+
+        viewModel.modelYear = "2015"
+        viewModel.applyFipe(detail)
+        assertEquals("2015", viewModel.modelYear)
+
+        viewModel.clearFipe()
+        assertNull(viewModel.fipe)
+        assertNull(viewModel.fipePreviewPrice)
+    }
+
+    @Test
+    fun `changing the vehicle kind clears the FIPE choice`() {
+        val viewModel = makeViewModel()
+        viewModel.applyFipe(detail)
+
+        viewModel.kind = VehicleKind.CAR
+        assertNotNull(viewModel.fipe)
+        viewModel.kind = VehicleKind.MOTORCYCLE
+        assertNull(viewModel.fipe)
+    }
+
+    @Test
+    fun `FIPE and purchase fields are saved and kept on edit`() =
+        runTest {
+            val vehicles = InMemoryVehicleRepository()
+            val viewModel = makeViewModel(vehicleRepository = vehicles)
+            viewModel.name = "Amarok"
+            viewModel.modelYear = "2000"
+            viewModel.applyFipe(detail)
+            viewModel.purchaseDate = LocalDate.of(2001, 1, 10)
+            viewModel.purchasePrice = NumberInput.text(BigDecimal("92500.50"), NumberInput.Style.MONEY)
+
+            viewModel.save()
+
+            val saved = vehicles.all(includingArchived = true).single()
+            assertEquals(detail.selection, saved.fipe)
+            assertEquals(LocalDate.of(2001, 1, 10), saved.purchaseDate)
+            assertEquals(0, BigDecimal("92500.50").compareTo(saved.purchasePrice))
+
+            val edit = makeViewModel(mode = VehicleFormViewModel.Mode.Edit(saved), vehicleRepository = vehicles)
+            assertEquals(detail.selection, edit.fipe)
+            assertEquals(saved.purchaseDate, edit.purchaseDate)
+            edit.name = "Amarok V6"
+            edit.save()
+            assertEquals(saved.copy(name = "Amarok V6"), vehicles.vehicle(saved.id))
+        }
+
+    @Test
+    fun `a purchase in the future or for nothing blocks saving`() {
+        val viewModel = makeViewModel()
+        viewModel.name = "Gol"
+        viewModel.purchaseDate = LocalDate.of(2001, 2, 1)
+        assertTrue(ValidationIssue.PurchaseDateInFuture in viewModel.issues)
+        assertFalse(viewModel.canSave)
+
+        viewModel.purchaseDate = LocalDate.of(2001, 1, 31)
+        viewModel.purchasePrice = NumberInput.text(BigDecimal.ZERO, NumberInput.Style.MONEY)
+        assertEquals(listOf<ValidationIssue>(ValidationIssue.PurchasePriceNotPositive), viewModel.issues)
+        assertFalse(viewModel.canSave)
+
+        viewModel.purchasePrice = ""
+        assertTrue(viewModel.canSave)
+    }
 }

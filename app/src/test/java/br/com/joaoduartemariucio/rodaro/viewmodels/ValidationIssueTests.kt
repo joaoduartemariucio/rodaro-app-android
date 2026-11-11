@@ -11,6 +11,7 @@ import br.com.joaoduartemariucio.rodaro.calculations.service
 import br.com.joaoduartemariucio.rodaro.calculations.testVehicleId
 import br.com.joaoduartemariucio.rodaro.calculations.utc
 import br.com.joaoduartemariucio.rodaro.domain.common.errors.AccountError
+import br.com.joaoduartemariucio.rodaro.domain.common.errors.RemoteDataError
 import br.com.joaoduartemariucio.rodaro.domain.common.errors.RepositoryError
 import br.com.joaoduartemariucio.rodaro.fakes.TestLocalizer
 import br.com.joaoduartemariucio.rodaro.presentation.common.ValidationIssue
@@ -69,6 +70,8 @@ class ValidationIssueTests {
                 ValidationIssue.AmountRequired,
                 ValidationIssue.CoverageEndBeforeStart,
                 ValidationIssue.InstallmentInvalid,
+                ValidationIssue.PurchaseDateInFuture,
+                ValidationIssue.PurchasePriceNotPositive,
             )
 
         assertFalse(warnings.any { it.isBlocking })
@@ -95,6 +98,8 @@ class ValidationIssueTests {
                 ValidationIssue.AmountRequired,
                 ValidationIssue.CoverageEndBeforeStart,
                 ValidationIssue.InstallmentInvalid,
+                ValidationIssue.PurchaseDateInFuture,
+                ValidationIssue.PurchasePriceNotPositive,
             )
 
         assertEquals(issues.size, issues.map { it.message(TestLocalizer()) }.toSet().size)
@@ -130,5 +135,19 @@ class ValidationIssueTests {
         assertEquals("You are not signed in.", AccountError.NotSignedIn.message(localizer))
         assertEquals("Could not complete the request.", AccountError.Failed(Exception("reason")).message(localizer))
         assertEquals("Could not complete the request.", AccountError.Failed(IllegalStateException()).message(localizer))
+    }
+
+    @Test
+    fun `remote data errors read as user-facing messages`() {
+        val localizer = TestLocalizer()
+
+        assertEquals(
+            "Could not reach the service. Check your internet and try again.",
+            RemoteDataError.NetworkUnavailable.message(localizer),
+        )
+        assertEquals("Too many requests right now. Try again later.", RemoteDataError.QuotaExceeded.message(localizer))
+        assertEquals("The service did not find this item.", RemoteDataError.NotFound.message(localizer))
+        assertEquals("The service could not answer. Try again later.", RemoteDataError.Unreadable().message(localizer))
+        assertEquals("The service could not answer. Try again later.", RemoteDataError.RequestFailed(Exception()).message(localizer))
     }
 }

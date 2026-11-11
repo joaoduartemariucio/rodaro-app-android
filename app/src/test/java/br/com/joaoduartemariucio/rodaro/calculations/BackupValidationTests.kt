@@ -150,4 +150,19 @@ class BackupValidationTests {
             BackupValidation.problems(snapshot),
         )
     }
+
+    @Test
+    fun `repeated FIPE quote ids and quotes without their vehicle are reported`() {
+        val quote = BackupFixtures.fipeQuote
+        val snapshot = BackupFixtures.fipeSnapshot().copy(fipeQuotes = listOf(quote, quote, quote.copy(id = orphanId, vehicleId = orphanId)))
+
+        assertEquals(
+            listOf<BackupProblem>(
+                BackupProblem.DuplicateId(BackupTable.FIPE_QUOTES, quote.id),
+                BackupProblem.MissingVehicle(BackupTable.FIPE_QUOTES, orphanId, orphanId),
+            ),
+            BackupValidation.problems(snapshot),
+        )
+        assertTrue(BackupValidation.problems(BackupFixtures.fipeSnapshot()).isEmpty())
+    }
 }

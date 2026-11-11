@@ -19,12 +19,15 @@ import br.com.joaoduartemariucio.rodaro.domain.preferences.entities.LanguageOpti
 import br.com.joaoduartemariucio.rodaro.domain.preferences.entities.UnitSystem
 import br.com.joaoduartemariucio.rodaro.domain.trips.entities.RoutePoint
 import br.com.joaoduartemariucio.rodaro.domain.trips.entities.SavedRoute
+import br.com.joaoduartemariucio.rodaro.domain.valuation.entities.FipeQuote
+import br.com.joaoduartemariucio.rodaro.domain.valuation.entities.FipeSelection
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.FuelCapability
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.Vehicle
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.VehicleKind
 import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
+import java.time.YearMonth
 import java.util.UUID
 
 object BackupFixtures {
@@ -187,4 +190,32 @@ object BackupFixtures {
             expenses = listOf(insurance, fine),
             dueItems = listOf(ipva, license),
         )
+
+    val fipeSelection = FipeSelection("005340-6", "2014-3", "VW - VolksWagen", "Amarok CD 2.0 16V TDI 4x4 Diesel", "2014 Diesel")
+
+    val fipeQuote =
+        FipeQuote(
+            id = FipeQuote.id(golId, "005340-6", "2014-3", YearMonth.of(2026, 11)),
+            vehicleId = golId,
+            fipeCode = "005340-6",
+            yearCode = "2014-3",
+            month = YearMonth.of(2026, 11),
+            price = BigDecimal("85386.00"),
+            fetchedAt = Instant.parse("2026-11-11T10:00:00Z"),
+        )
+
+    fun fipeSnapshot(): BackupSnapshot =
+        fullSnapshot().let { snapshot ->
+            snapshot.copy(
+                vehicles =
+                    snapshot.vehicles.map {
+                        if (it.id == golId) {
+                            it.copy(fipe = fipeSelection, purchaseDate = LocalDate.parse("2026-03-14"), purchasePrice = BigDecimal("92500.50"))
+                        } else {
+                            it
+                        }
+                    },
+                fipeQuotes = listOf(fipeQuote),
+            )
+        }
 }

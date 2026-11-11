@@ -1,6 +1,7 @@
 package br.com.joaoduartemariucio.rodaro.presentation.vehicles.form
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -9,9 +10,12 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
@@ -44,18 +48,23 @@ import br.com.joaoduartemariucio.rodaro.presentation.common.FormDialog
 import br.com.joaoduartemariucio.rodaro.presentation.common.FormState
 import br.com.joaoduartemariucio.rodaro.presentation.common.LabeledNumberField
 import br.com.joaoduartemariucio.rodaro.presentation.common.NumberInput
+import br.com.joaoduartemariucio.rodaro.presentation.common.OptionalDateField
 import br.com.joaoduartemariucio.rodaro.presentation.common.SectionCard
 import br.com.joaoduartemariucio.rodaro.presentation.common.SectionDivider
 import br.com.joaoduartemariucio.rodaro.presentation.common.SectionFooter
 import br.com.joaoduartemariucio.rodaro.presentation.common.SectionHeader
+import br.com.joaoduartemariucio.rodaro.presentation.common.UnitConversion
 import br.com.joaoduartemariucio.rodaro.presentation.common.ValidationFooter
 import br.com.joaoduartemariucio.rodaro.presentation.common.ads.InterstitialAds
 import br.com.joaoduartemariucio.rodaro.presentation.common.distanceUnit
+import br.com.joaoduartemariucio.rodaro.presentation.common.formattedCurrency
+import br.com.joaoduartemariucio.rodaro.presentation.common.formattedShortMonthAndYear
 import br.com.joaoduartemariucio.rodaro.presentation.common.icon
 import br.com.joaoduartemariucio.rodaro.presentation.common.keepsKeyboard
 import br.com.joaoduartemariucio.rodaro.presentation.common.label
 import br.com.joaoduartemariucio.rodaro.presentation.common.volumeUnit
 import br.com.joaoduartemariucio.rodaro.presentation.vehicles.form.components.ServiceRuleRow
+import br.com.joaoduartemariucio.rodaro.presentation.vehicles.form.fipe.FipePickerDialog
 import kotlinx.coroutines.launch
 
 @Composable
@@ -78,6 +87,8 @@ fun VehicleFormDialog(
             )
         }
     val coroutines = rememberCoroutineScope()
+    var isPickingFipe by remember { mutableStateOf(false) }
+    val zone = dependencies.dateProvider.zone
 
     FormDialog(
         title = stringResource(if (mode is VehicleFormViewModel.Mode.Create) R.string.new_vehicle else R.string.edit_vehicle),
@@ -166,6 +177,64 @@ fun VehicleFormDialog(
             }
         }
 
+        if (UnitConversion.usesBrazilianReal) {
+            item {
+                SectionHeader(stringResource(R.string.fipe_title))
+                SectionCard {
+                    val fipe = viewModel.fipe
+                    if (fipe == null) {
+                        TextButton(onClick = { isPickingFipe = true }) {
+                            Icon(Icons.Filled.Sell, contentDescription = null)
+                            Text(stringResource(R.string.fipe_pick), modifier = Modifier.padding(start = 8.dp))
+                        }
+                    } else {
+                        Row(Modifier.fillMaxWidth().heightIn(min = 44.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("${fipe.brandName} · ${fipe.modelName}", style = MaterialTheme.typography.bodyLarge)
+                                val preview = viewModel.fipePreviewPrice
+                                Text(
+                                    if (preview == null) {
+                                        fipe.yearName
+                                    } else {
+                                        "${fipe.yearName} · ${preview.price.formattedCurrency} · " +
+                                            stringResource(R.string.fipe_reference, preview.month.formattedShortMonthAndYear(zone))
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            TextButton(onClick = { isPickingFipe = true }) { Text(stringResource(R.string.fipe_change)) }
+                            IconButton(onClick = viewModel::clearFipe) {
+                                Icon(Icons.Filled.Clear, contentDescription = stringResource(R.string.fipe_clear))
+                            }
+                        }
+                    }
+                    SectionDivider()
+                    OptionalDateField(
+                        stringResource(R.string.fipe_purchase_date),
+                        viewModel.purchaseDate,
+                        { viewModel.purchaseDate = it },
+                        viewModel.today,
+                        zone,
+                    )
+                    SectionDivider()
+                    LabeledNumberField(
+                        title = stringResource(R.string.fipe_purchase_price),
+                        style = NumberInput.Style.MONEY,
+                        text = viewModel.purchasePrice,
+                        onTextChange = { viewModel.purchasePrice = it },
+                    )
+                }
+                SectionFooter {
+                    Text(
+                        stringResource(R.string.fipe_form_footer) + "\n" + stringResource(R.string.fipe_source),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+
         item {
             SectionHeader(stringResource(R.string.specs))
             SectionCard {
@@ -222,6 +291,10 @@ fun VehicleFormDialog(
         if (viewModel.issues.isNotEmpty()) {
             item { SectionCard(Modifier.padding(top = 16.dp)) { ValidationFooter(viewModel.issues) } }
         }
+    }
+
+    if (isPickingFipe) {
+        FipePickerDialog(kind = viewModel.kind, onPicked = viewModel::applyFipe, onDismiss = { isPickingFipe = false })
     }
 }
 

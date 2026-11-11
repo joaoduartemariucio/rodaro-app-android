@@ -7,8 +7,11 @@ import androidx.lifecycle.ViewModel
 import br.com.joaoduartemariucio.rodaro.app.NoAnalytics
 import br.com.joaoduartemariucio.rodaro.domain.common.services.Analytics
 import br.com.joaoduartemariucio.rodaro.domain.common.services.DateProvider
+import br.com.joaoduartemariucio.rodaro.domain.fueling.calculations.PriceComparison
+import br.com.joaoduartemariucio.rodaro.domain.fueling.calculations.PriceComparisons
 import br.com.joaoduartemariucio.rodaro.domain.fueling.entities.FuelEntry
 import br.com.joaoduartemariucio.rodaro.domain.fueling.entities.FuelType
+import br.com.joaoduartemariucio.rodaro.domain.fueling.entities.RegionalPriceTable
 import br.com.joaoduartemariucio.rodaro.domain.fueling.repositories.FuelEntryRepository
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.calculations.Odometer
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.FuelCapability
@@ -33,6 +36,8 @@ class FuelEntryFormViewModel(
     fuelCapability: FuelCapability = FuelCapability.FLEX,
     private val suggestedPrices: Map<FuelType, BigDecimal> = emptyMap(),
     suggestedFuelType: FuelType? = null,
+    private val regionalTable: RegionalPriceTable? = null,
+    private val uf: String? = null,
 ) : ViewModel() {
     sealed interface Mode {
         data class Create(
@@ -137,6 +142,14 @@ class FuelEntryFormViewModel(
             }
 
     val canSave: Boolean get() = !issues.blocksSaving && !state.isSaving
+
+    val priceComparison: PriceComparison?
+        get() {
+            val table = regionalTable ?: return null
+            val price = parsedPrice?.takeIf { it.signum() > 0 } ?: return null
+            if (!UnitConversion.usesBrazilianReal) return null
+            return PriceComparisons.compare(price, fuelType, date, uf, table, dateProvider.zone)
+        }
 
     suspend fun save() {
         val odometer = parsedOdometer ?: return

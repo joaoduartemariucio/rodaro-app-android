@@ -8,6 +8,7 @@ import br.com.joaoduartemariucio.rodaro.domain.preferences.entities.Preferences
 import br.com.joaoduartemariucio.rodaro.domain.preferences.entities.UnitSystem
 import java.math.BigDecimal
 import java.math.MathContext
+import java.util.Locale
 
 object DisplayPreferences {
     var current: Preferences by mutableStateOf(Preferences())
@@ -27,6 +28,9 @@ object UnitConversion {
     val isImperial: Boolean get() = DisplayPreferences.current.unitSystem == UnitSystem.IMPERIAL
 
     val preferredCurrency: CurrencyOption? get() = DisplayPreferences.current.currency
+
+    val usesBrazilianReal: Boolean
+        get() = (preferredCurrency?.code ?: Formats.currencyFor(Locale.getDefault()).currencyCode) == CurrencyOption.BRL.code
 
     fun distance(kilometers: Double): Double = if (isImperial) kilometers / KILOMETERS_PER_MILE else kilometers
 

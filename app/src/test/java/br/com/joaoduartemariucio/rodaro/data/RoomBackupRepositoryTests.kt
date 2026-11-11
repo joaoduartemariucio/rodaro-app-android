@@ -117,4 +117,20 @@ class RoomBackupRepositoryTests {
             backup.replaceAll(BackupSnapshot())
             assertEquals(BackupContents(0, 0, 0, 0, 0, 0, 0), backup.snapshot().contents)
         }
+
+    @Test
+    fun `replacing round trips FIPE fields and quotes and clears old quotes`() =
+        runTest {
+            seed()
+            val incoming = BackupFixtures.fipeSnapshot().copy(preferences = null, exportedAt = null)
+
+            backup.replaceAll(incoming)
+
+            val snapshot = backup.snapshot()
+            assertEquals(incoming.fipeQuotes, snapshot.fipeQuotes)
+            assertEquals(incoming.vehicles.first { it.id == BackupFixtures.golId }, snapshot.vehicles.first { it.id == BackupFixtures.golId })
+
+            backup.replaceAll(BackupSnapshot())
+            assertEquals(emptyList(), backup.snapshot().fipeQuotes)
+        }
 }
