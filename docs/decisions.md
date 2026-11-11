@@ -886,6 +886,16 @@ three letters clears the list at once without a request.
   answers arrived out of order.
 - **Cost:** suggestions appear 400 ms later than before.
 
+### Each profile setting opens its own preferences page
+
+The four rows under Settings in the profile (notifications, units and currency, language,
+privacy) open `PreferencesScreen` with a `PreferencesSection`, which shows only that section
+and takes its title from the row.
+
+- **Why:** every row used to open the same full preferences list, while the rows, each with its
+  own icon, value and chevron, promised a page of their own.
+- **Cost:** there is no longer one page with every preference; each is reached from its row.
+
 ## Tooling
 
 ### Four specialized AI agents instead of one

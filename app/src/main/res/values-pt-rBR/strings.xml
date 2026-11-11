@@ -238,13 +238,11 @@
     <string name="gallons">Galões</string>
     <string name="price_per_gallon">Preço por galão</string>
     <string name="cost_per_mile">Custo por milha</string>
-    <string name="preferences">Preferências</string>
     <string name="pref_section_notifications">Notificações</string>
     <string name="pref_push_title">Novidades e avisos</string>
     <string name="pref_push_description">Mensagens push do Rodaro sobre novidades e recursos.</string>
     <string name="pref_reminders_title">Lembretes de manutenção</string>
     <string name="pref_reminders_description">Alertas locais quando uma manutenção dos seus veículos está prevista.</string>
-    <string name="pref_section_display">Exibição</string>
     <string name="pref_currency_title">Moeda</string>
     <string name="pref_currency_system">Seguir o celular</string>
     <string name="pref_currency_note">Apenas muda como os valores são exibidos. Não há conversão de moeda.</string>

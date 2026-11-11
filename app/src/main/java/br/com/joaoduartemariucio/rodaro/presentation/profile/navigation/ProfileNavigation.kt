@@ -12,7 +12,7 @@ fun EntryProviderScope<Route>.profileEntries(navigator: Navigator) {
     entry<ProfileRoute.Profile> {
         ProfileScreen(
             onSignIn = { navigator.open(ProfileRoute.Auth) },
-            onPreferences = { navigator.open(ProfileRoute.Preferences) },
+            onPreferences = { section -> navigator.open(ProfileRoute.Preferences(section)) },
             onBackup = { navigator.open(ProfileRoute.Backup) },
         )
     }
@@ -22,6 +22,6 @@ fun EntryProviderScope<Route>.profileEntries(navigator: Navigator) {
             onSignedIn = navigator::back,
         )
     }
-    entry<ProfileRoute.Preferences> { PreferencesScreen(onBack = navigator::back) }
+    entry<ProfileRoute.Preferences> { route -> PreferencesScreen(section = route.section, onBack = navigator::back) }
     entry<ProfileRoute.Backup> { BackupScreen(onBack = navigator::back) }
 }

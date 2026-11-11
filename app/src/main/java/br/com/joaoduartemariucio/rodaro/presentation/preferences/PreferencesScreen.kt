@@ -2,6 +2,7 @@ package br.com.joaoduartemariucio.rodaro.presentation.preferences
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -38,13 +39,15 @@ import br.com.joaoduartemariucio.rodaro.presentation.common.FormState
 import br.com.joaoduartemariucio.rodaro.presentation.common.SectionCard
 import br.com.joaoduartemariucio.rodaro.presentation.common.SectionDivider
 import br.com.joaoduartemariucio.rodaro.presentation.common.SectionFooter
-import br.com.joaoduartemariucio.rodaro.presentation.common.SectionHeader
 import kotlinx.coroutines.launch
 import java.util.Currency
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PreferencesScreen(onBack: () -> Unit) {
+fun PreferencesScreen(
+    section: PreferencesSection,
+    onBack: () -> Unit,
+) {
     val dependencies = LocalDependencies.current
     val viewModel =
         viewModel {
@@ -64,7 +67,7 @@ fun PreferencesScreen(onBack: () -> Unit) {
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
         topBar = {
             LargeTopAppBar(
-                title = { Text(stringResource(R.string.preferences)) },
+                title = { Text(stringResource(section.titleRes)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null) }
                 },
@@ -80,106 +83,111 @@ fun PreferencesScreen(onBack: () -> Unit) {
             Modifier
                 .fillMaxSize()
                 .padding(padding),
+            contentPadding = PaddingValues(vertical = 8.dp),
         ) {
-            item {
-                SectionHeader(stringResource(R.string.pref_section_notifications))
-                SectionCard {
-                    SwitchRow(
-                        title = stringResource(R.string.pref_push_title),
-                        description = stringResource(R.string.pref_push_description),
-                        checked = viewModel.preferences.pushEnabled,
-                        onCheckedChange = { enabled -> coroutines.launch { viewModel.setPushEnabled(enabled) } },
-                    )
-                    SectionDivider()
-                    SwitchRow(
-                        title = stringResource(R.string.pref_reminders_title),
-                        description = stringResource(R.string.pref_reminders_description),
-                        checked = viewModel.preferences.remindersEnabled,
-                        onCheckedChange = { enabled -> coroutines.launch { viewModel.setRemindersEnabled(enabled) } },
-                    )
-                }
-            }
-
-            item {
-                SectionHeader(stringResource(R.string.pref_section_display))
-                SectionCard {
-                    Text(
-                        stringResource(R.string.pref_currency_title),
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    )
-                    OptionRow(
-                        title = stringResource(R.string.pref_currency_system),
-                        selected = viewModel.preferences.currency == null,
-                        onClick = { coroutines.launch { viewModel.setCurrency(null) } },
-                    )
-                    CurrencyOption.entries.forEach { option ->
+            if (section == PreferencesSection.NOTIFICATIONS) {
+                item {
+                    SectionCard {
+                        SwitchRow(
+                            title = stringResource(R.string.pref_push_title),
+                            description = stringResource(R.string.pref_push_description),
+                            checked = viewModel.preferences.pushEnabled,
+                            onCheckedChange = { enabled -> coroutines.launch { viewModel.setPushEnabled(enabled) } },
+                        )
                         SectionDivider()
-                        OptionRow(
-                            title = currencyLabel(option),
-                            selected = viewModel.preferences.currency == option,
-                            onClick = { coroutines.launch { viewModel.setCurrency(option) } },
+                        SwitchRow(
+                            title = stringResource(R.string.pref_reminders_title),
+                            description = stringResource(R.string.pref_reminders_description),
+                            checked = viewModel.preferences.remindersEnabled,
+                            onCheckedChange = { enabled -> coroutines.launch { viewModel.setRemindersEnabled(enabled) } },
                         )
                     }
                 }
-                SectionFooter {
-                    Text(
-                        stringResource(R.string.pref_currency_note),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                SectionCard {
-                    Text(
-                        stringResource(R.string.pref_units_title),
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    )
-                    OptionRow(
-                        title = stringResource(R.string.pref_units_metric),
-                        selected = viewModel.preferences.unitSystem == UnitSystem.METRIC,
-                        onClick = { coroutines.launch { viewModel.setUnitSystem(UnitSystem.METRIC) } },
-                    )
-                    SectionDivider()
-                    OptionRow(
-                        title = stringResource(R.string.pref_units_imperial),
-                        selected = viewModel.preferences.unitSystem == UnitSystem.IMPERIAL,
-                        onClick = { coroutines.launch { viewModel.setUnitSystem(UnitSystem.IMPERIAL) } },
-                    )
-                }
             }
 
-            item {
-                SectionHeader(stringResource(R.string.pref_section_privacy))
-                SectionCard {
-                    SwitchRow(
-                        title = stringResource(R.string.pref_usage_statistics_title),
-                        description = stringResource(R.string.pref_usage_statistics_description),
-                        checked = viewModel.preferences.usageStatisticsEnabled,
-                        onCheckedChange = { enabled -> coroutines.launch { viewModel.setUsageStatisticsEnabled(enabled) } },
-                    )
-                    SectionDivider()
-                    SwitchRow(
-                        title = stringResource(R.string.pref_personalized_ads_title),
-                        description = stringResource(R.string.pref_personalized_ads_description),
-                        checked = viewModel.preferences.personalizedAdsEnabled,
-                        onCheckedChange = { enabled -> coroutines.launch { viewModel.setPersonalizedAdsEnabled(enabled) } },
-                    )
-                }
-            }
-
-            item {
-                SectionHeader(stringResource(R.string.pref_section_language))
-                SectionCard {
-                    LanguageOption.entries.forEach { option ->
-                        if (option != LanguageOption.SYSTEM) SectionDivider()
-                        OptionRow(
-                            title = languageLabel(option),
-                            selected = viewModel.preferences.language == option,
-                            onClick = { coroutines.launch { viewModel.setLanguage(option) } },
+            if (section == PreferencesSection.DISPLAY) {
+                item {
+                    SectionCard {
+                        Text(
+                            stringResource(R.string.pref_currency_title),
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                         )
+                        OptionRow(
+                            title = stringResource(R.string.pref_currency_system),
+                            selected = viewModel.preferences.currency == null,
+                            onClick = { coroutines.launch { viewModel.setCurrency(null) } },
+                        )
+                        CurrencyOption.entries.forEach { option ->
+                            SectionDivider()
+                            OptionRow(
+                                title = currencyLabel(option),
+                                selected = viewModel.preferences.currency == option,
+                                onClick = { coroutines.launch { viewModel.setCurrency(option) } },
+                            )
+                        }
+                    }
+                    SectionFooter {
+                        Text(
+                            stringResource(R.string.pref_currency_note),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    SectionCard {
+                        Text(
+                            stringResource(R.string.pref_units_title),
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        )
+                        OptionRow(
+                            title = stringResource(R.string.pref_units_metric),
+                            selected = viewModel.preferences.unitSystem == UnitSystem.METRIC,
+                            onClick = { coroutines.launch { viewModel.setUnitSystem(UnitSystem.METRIC) } },
+                        )
+                        SectionDivider()
+                        OptionRow(
+                            title = stringResource(R.string.pref_units_imperial),
+                            selected = viewModel.preferences.unitSystem == UnitSystem.IMPERIAL,
+                            onClick = { coroutines.launch { viewModel.setUnitSystem(UnitSystem.IMPERIAL) } },
+                        )
+                    }
+                }
+            }
+
+            if (section == PreferencesSection.PRIVACY) {
+                item {
+                    SectionCard {
+                        SwitchRow(
+                            title = stringResource(R.string.pref_usage_statistics_title),
+                            description = stringResource(R.string.pref_usage_statistics_description),
+                            checked = viewModel.preferences.usageStatisticsEnabled,
+                            onCheckedChange = { enabled -> coroutines.launch { viewModel.setUsageStatisticsEnabled(enabled) } },
+                        )
+                        SectionDivider()
+                        SwitchRow(
+                            title = stringResource(R.string.pref_personalized_ads_title),
+                            description = stringResource(R.string.pref_personalized_ads_description),
+                            checked = viewModel.preferences.personalizedAdsEnabled,
+                            onCheckedChange = { enabled -> coroutines.launch { viewModel.setPersonalizedAdsEnabled(enabled) } },
+                        )
+                    }
+                }
+            }
+
+            if (section == PreferencesSection.LANGUAGE) {
+                item {
+                    SectionCard {
+                        LanguageOption.entries.forEach { option ->
+                            if (option != LanguageOption.SYSTEM) SectionDivider()
+                            OptionRow(
+                                title = languageLabel(option),
+                                selected = viewModel.preferences.language == option,
+                                onClick = { coroutines.launch { viewModel.setLanguage(option) } },
+                            )
+                        }
                     }
                 }
             }

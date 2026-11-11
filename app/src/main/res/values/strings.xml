@@ -232,13 +232,11 @@
     <string name="gallons">Gallons</string>
     <string name="price_per_gallon">Price per gallon</string>
     <string name="cost_per_mile">Cost per mile</string>
-    <string name="preferences">Preferences</string>
     <string name="pref_section_notifications">Notifications</string>
     <string name="pref_push_title">News and alerts</string>
     <string name="pref_push_description">Push messages from Rodaro about news and features.</string>
     <string name="pref_reminders_title">Maintenance reminders</string>
     <string name="pref_reminders_description">Local alerts when a service on your vehicles is due.</string>
-    <string name="pref_section_display">Display</string>
     <string name="pref_currency_title">Currency</string>
     <string name="pref_currency_system">Follow the phone</string>
     <string name="pref_currency_note">Only changes how values are shown. There is no currency conversion.</string>

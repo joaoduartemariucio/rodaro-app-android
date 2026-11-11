@@ -88,6 +88,7 @@ import br.com.joaoduartemariucio.rodaro.presentation.common.SectionCard
 import br.com.joaoduartemariucio.rodaro.presentation.common.SectionHeader
 import br.com.joaoduartemariucio.rodaro.presentation.common.StoreLinks
 import br.com.joaoduartemariucio.rodaro.presentation.common.formattedCurrency
+import br.com.joaoduartemariucio.rodaro.presentation.preferences.PreferencesSection
 import kotlinx.coroutines.launch
 import java.util.Currency
 import java.util.Locale
@@ -96,7 +97,7 @@ import java.util.Locale
 @Composable
 fun ProfileScreen(
     onSignIn: () -> Unit,
-    onPreferences: () -> Unit,
+    onPreferences: (PreferencesSection) -> Unit,
     onBackup: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -162,7 +163,7 @@ fun ProfileScreen(
                     tint = Palette.red,
                     title = stringResource(R.string.pref_section_notifications),
                     value = notificationsLabel(viewModel.notifications),
-                    onClick = onPreferences,
+                    onClick = { onPreferences(PreferencesSection.NOTIFICATIONS) },
                 )
                 RowDivider()
                 ProfileRow(
@@ -170,7 +171,7 @@ fun ProfileScreen(
                     tint = Palette.blue,
                     title = stringResource(R.string.profile_units_currency),
                     value = unitsAndCurrencyLabel(viewModel),
-                    onClick = onPreferences,
+                    onClick = { onPreferences(PreferencesSection.DISPLAY) },
                 )
                 RowDivider()
                 ProfileRow(
@@ -178,7 +179,7 @@ fun ProfileScreen(
                     tint = Palette.service,
                     title = stringResource(R.string.pref_section_language),
                     value = languageLabel(viewModel.preferences.language),
-                    onClick = onPreferences,
+                    onClick = { onPreferences(PreferencesSection.LANGUAGE) },
                 )
                 RowDivider()
                 ProfileRow(
@@ -186,7 +187,7 @@ fun ProfileScreen(
                     tint = Palette.green,
                     title = stringResource(R.string.pref_section_privacy),
                     value = stringResource(R.string.profile_privacy_summary),
-                    onClick = onPreferences,
+                    onClick = { onPreferences(PreferencesSection.PRIVACY) },
                 )
             }
 
