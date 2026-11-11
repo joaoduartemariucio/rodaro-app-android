@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.dp
 import br.com.joaoduartemariucio.rodaro.R
 import br.com.joaoduartemariucio.rodaro.app.LocalDependencies
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.OdometerSample
+import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.VehicleKind
 import br.com.joaoduartemariucio.rodaro.presentation.common.DateField
 import br.com.joaoduartemariucio.rodaro.presentation.common.FailureMessage
 import br.com.joaoduartemariucio.rodaro.presentation.common.FormDialog
@@ -35,6 +36,7 @@ import kotlinx.coroutines.launch
 fun ServiceEntryFormDialog(
     mode: ServiceEntryFormViewModel.Mode,
     otherReadings: List<OdometerSample>,
+    vehicleKind: VehicleKind,
     onSaved: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -47,6 +49,7 @@ fun ServiceEntryFormDialog(
                 dateProvider = dependencies.dateProvider,
                 otherReadings = otherReadings,
                 analytics = dependencies.analytics,
+                vehicleKind = vehicleKind,
             )
         }
     val coroutines = rememberCoroutineScope()
@@ -69,7 +72,7 @@ fun ServiceEntryFormDialog(
     ) {
         item {
             SectionHeader(stringResource(R.string.service_type))
-            SectionCard { ServiceKindGrid(viewModel.kind) { viewModel.kind = it } }
+            SectionCard { ServiceKindGrid(viewModel.availableKinds, viewModel.kind) { viewModel.kind = it } }
         }
 
         item {
@@ -92,6 +95,19 @@ fun ServiceEntryFormDialog(
                 )
             }
             SectionFooter { OdometerHint(viewModel.previousReading) }
+        }
+
+        item {
+            SectionHeader(stringResource(R.string.service_workshop))
+            SectionCard {
+                OutlinedTextField(
+                    value = viewModel.workshop,
+                    onValueChange = { viewModel.workshop = it },
+                    placeholder = { Text(stringResource(R.string.service_workshop_prompt)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().keepsKeyboard(),
+                )
+            }
         }
 
         item {

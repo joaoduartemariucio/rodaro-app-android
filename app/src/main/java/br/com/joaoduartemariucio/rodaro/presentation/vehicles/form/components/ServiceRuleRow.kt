@@ -13,6 +13,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -39,6 +40,9 @@ import br.com.joaoduartemariucio.rodaro.presentation.vehicles.form.VehicleFormVi
 @Composable
 fun ServiceRuleRow(
     rule: VehicleFormViewModel.RuleDraft,
+    kinds: List<ServiceKind>,
+    hint: VehicleFormViewModel.ManualHint,
+    onSelect: (ServiceKind) -> Unit,
     onRemove: () -> Unit,
 ) {
     var isPicking by remember { mutableStateOf(false) }
@@ -52,12 +56,12 @@ fun ServiceRuleRow(
                     Icon(Icons.Filled.ArrowDropDown, contentDescription = stringResource(R.string.service_type))
                 }
                 DropdownMenu(expanded = isPicking, onDismissRequest = { isPicking = false }) {
-                    for (kind in ServiceKind.entries) {
+                    for (kind in kinds) {
                         DropdownMenuItem(
                             text = { Text(stringResource(kind.label)) },
                             leadingIcon = { Icon(kind.icon, contentDescription = null) },
                             onClick = {
-                                rule.kind = kind
+                                onSelect(kind)
                                 isPicking = false
                             },
                         )
@@ -88,6 +92,15 @@ fun ServiceRuleRow(
             text = rule.monthInterval,
             onTextChange = { rule.monthInterval = it },
         )
+        if (hint != VehicleFormViewModel.ManualHint.NONE) {
+            Text(
+                stringResource(
+                    if (hint == VehicleFormViewModel.ManualHint.STRONG) R.string.rule_default_hint_strong else R.string.rule_default_hint,
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = if (hint == VehicleFormViewModel.ManualHint.STRONG) Palette.orange else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         ValidationFooter(rule.issues)
     }
 }

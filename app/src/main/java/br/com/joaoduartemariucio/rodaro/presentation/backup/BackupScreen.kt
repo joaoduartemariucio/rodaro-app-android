@@ -244,6 +244,8 @@ private fun contentsLabel(contents: BackupContents): String =
         contents.serviceEntries,
         contents.serviceRules,
         contents.savedRoutes,
+        contents.expenses,
+        contents.dueItems,
     )
 
 @Composable

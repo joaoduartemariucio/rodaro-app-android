@@ -1,0 +1,159 @@
+{
+  "format": "rodaro.backup",
+  "formatVersion": 2,
+  "exportedAt": "2025-05-01T18:00:00.000Z",
+  "app": {
+    "platform": "android",
+    "version": "1.2.0"
+  },
+  "vehicles": [
+    {
+      "id": "11111111-1111-4111-8111-111111111111",
+      "name": "Gol",
+      "kind": "car",
+      "plate": "ABC1D23",
+      "initialOdometerKm": 1000.0,
+      "tankCapacityLiters": 55.0,
+      "createdAt": "2025-01-10T12:30:00.123Z",
+      "isArchived": false,
+      "fuelCapability": "flex",
+      "uf": "SP",
+      "modelYear": 2019
+    },
+    {
+      "id": "22222222-2222-4222-8222-222222222222",
+      "name": "CB 500",
+      "kind": "motorcycle",
+      "plate": null,
+      "initialOdometerKm": 0.0,
+      "tankCapacityLiters": null,
+      "createdAt": "2025-02-01T08:00:00.000Z",
+      "isArchived": true,
+      "fuelCapability": "gasolina",
+      "uf": null,
+      "modelYear": null
+    }
+  ],
+  "fuelEntries": [
+    {
+      "id": "33333333-3333-4333-8333-333333333333",
+      "vehicleId": "11111111-1111-4111-8111-111111111111",
+      "date": "2025-03-01T10:00:00.000Z",
+      "odometerKm": 1500.0,
+      "liters": 40.5,
+      "pricePerLiter": "5.899",
+      "isFullTank": true,
+      "fuelType": "etanol",
+      "createdAt": "2025-03-02T09:00:00.000Z"
+    }
+  ],
+  "serviceEntries": [
+    {
+      "id": "44444444-4444-4444-8444-444444444444",
+      "vehicleId": "11111111-1111-4111-8111-111111111111",
+      "kind": "oilChange",
+      "date": "2025-03-05T10:00:00.000Z",
+      "odometerKm": 1600.0,
+      "cost": "120.00",
+      "notes": "Synthetic 5W30",
+      "workshop": "Oficina do Zé",
+      "createdAt": "2025-03-06T09:00:00.000Z"
+    }
+  ],
+  "serviceRules": [
+    {
+      "id": "55555555-5555-4555-8555-555555555555",
+      "vehicleId": "11111111-1111-4111-8111-111111111111",
+      "kind": "oilChange",
+      "kilometerInterval": 10000.0,
+      "monthInterval": 12
+    }
+  ],
+  "savedRoutes": [
+    {
+      "id": "66666666-6666-4666-8666-666666666666",
+      "vehicleId": "22222222-2222-4222-8222-222222222222",
+      "origin": "São Paulo",
+      "destination": "Campinas",
+      "distanceKm": 95.5,
+      "isRoundTrip": true,
+      "hasTolls": true,
+      "tollCost": "18.40",
+      "kilometersPerLiter": 25.0,
+      "pricePerLiter": "5.899",
+      "liters": 7.64,
+      "fuelCost": "45.07",
+      "costPerKilometer": "0.33",
+      "createdAt": "2025-04-01T09:15:00.000Z",
+      "pathPolyline6": "nbl|k@vtg}wAyojf@~ebY"
+    }
+  ],
+  "expenses": [
+    {
+      "id": "77777777-7777-4777-8777-777777777777",
+      "vehicleId": "11111111-1111-4111-8111-111111111111",
+      "category": "insurance",
+      "date": "2025-03-10T12:00:00.000Z",
+      "amount": "2450.37",
+      "odometerKm": 1650.0,
+      "note": "Apólice anual",
+      "coverageStart": "2025-03-10",
+      "coverageEnd": "2026-03-09",
+      "fine": null,
+      "createdAt": "2025-03-11T08:00:00.000Z"
+    },
+    {
+      "id": "88888888-8888-4888-8888-888888888888",
+      "vehicleId": "11111111-1111-4111-8111-111111111111",
+      "category": "fine",
+      "date": "2025-03-20T12:00:00.000Z",
+      "amount": "156.18",
+      "odometerKm": null,
+      "note": "",
+      "coverageStart": null,
+      "coverageEnd": null,
+      "fine": {
+        "infractionDate": "2025-03-01",
+        "severity": "serious",
+        "points": 5,
+        "dueDate": "2025-04-15",
+        "discount": "twenty",
+        "isPaid": false
+      },
+      "createdAt": "2025-03-20T12:00:00.000Z"
+    }
+  ],
+  "dueItems": [
+    {
+      "id": "99999999-9999-4999-8999-999999999999",
+      "vehicleId": "11111111-1111-4111-8111-111111111111",
+      "kind": "ipva",
+      "dueDate": "2025-03-15",
+      "amount": "812.45",
+      "paidAt": "2025-03-14T15:00:00.000Z",
+      "installmentNumber": 1,
+      "installmentCount": 3,
+      "note": "Cota 1",
+      "createdAt": "2025-01-20T10:00:00.000Z"
+    },
+    {
+      "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "vehicleId": null,
+      "kind": "driverLicense",
+      "dueDate": "2027-08-01",
+      "amount": null,
+      "paidAt": null,
+      "installmentNumber": null,
+      "installmentCount": null,
+      "note": "",
+      "createdAt": "2025-01-21T10:00:00.000Z"
+    }
+  ],
+  "preferences": {
+    "pushEnabled": false,
+    "remindersEnabled": true,
+    "currency": "BRL",
+    "unitSystem": "metric",
+    "language": "pt-BR"
+  }
+}

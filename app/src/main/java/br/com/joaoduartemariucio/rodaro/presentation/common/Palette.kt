@@ -12,6 +12,7 @@ import br.com.joaoduartemariucio.rodaro.domain.maintenance.calculations.Maintena
 object Palette {
     val fuel = Color(0xFF30B0C7)
     val service = Color(0xFF5856D6)
+    val expense = Color(0xFFA2845E)
     val green = Color(0xFF34C759)
     val orange = Color(0xFFFF9500)
     val red = Color(0xFFFF3B30)

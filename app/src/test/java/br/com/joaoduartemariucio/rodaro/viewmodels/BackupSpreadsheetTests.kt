@@ -2,6 +2,7 @@ package br.com.joaoduartemariucio.rodaro.viewmodels
 
 import br.com.joaoduartemariucio.rodaro.calculations.BackupFixtures
 import br.com.joaoduartemariucio.rodaro.domain.backup.entities.BackupSnapshot
+import br.com.joaoduartemariucio.rodaro.domain.costs.entities.ExpenseCategory
 import br.com.joaoduartemariucio.rodaro.domain.fueling.entities.FuelEntry
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.entities.ServiceKind
 import br.com.joaoduartemariucio.rodaro.fakes.TestLocalizer
@@ -44,9 +45,9 @@ class BackupSpreadsheetTests {
     fun `English uses commas between fields and a decimal point`() {
         assertEquals(
             listOf(
-                "Vehicle,Plate,Type,Date,Odometer (km),Liters,Price per liter,Full tank,Service,Total cost,Notes",
-                "Gol,ABC1D23,Fuel-up,2025-03-01,1500,40.5,5.899,Yes,,238.91,",
-                "Gol,ABC1D23,Service,2025-03-05,1600,,,,Oil change,120.00,Synthetic 5W30",
+                "Vehicle,Plate,Type,Date,Odometer (km),Liters,Price per liter,Full tank,Service,Total cost,Notes,Fuel type,Workshop,Category",
+                "Gol,ABC1D23,Fuel-up,2025-03-01,1500,40.5,5.899,Yes,,238.91,,,,",
+                "Gol,ABC1D23,Service,2025-03-05,1600,,,,Oil change,120.00,Synthetic 5W30,,,",
             ),
             lines(),
         )
@@ -56,9 +57,9 @@ class BackupSpreadsheetTests {
     fun `Brazilian Portuguese uses semicolons and a decimal comma with localized headers`() {
         assertEquals(
             listOf(
-                "Veículo;Placa;Tipo;Data;Odômetro (km);Litros;Preço por litro;Tanque cheio;Serviço;Custo total;Observações",
-                "Gol;ABC1D23;Abastecimento;2025-03-01;1500;40,5;5,899;Sim;;238,91;",
-                "Gol;ABC1D23;Serviço;2025-03-05;1600;;;;Troca de óleo;120,00;Synthetic 5W30",
+                "Veículo;Placa;Tipo;Data;Odômetro (km);Litros;Preço por litro;Tanque cheio;Serviço;Custo total;Observações;Combustível;Oficina;Categoria",
+                "Gol;ABC1D23;Abastecimento;2025-03-01;1500;40,5;5,899;Sim;;238,91;;;;",
+                "Gol;ABC1D23;Serviço;2025-03-05;1600;;;;Troca de óleo;120,00;Synthetic 5W30;;;",
             ),
             lines(localizer = portuguese),
         )
@@ -73,7 +74,7 @@ class BackupSpreadsheetTests {
 
         val text = BackupSpreadsheet.csv(snapshot, english, ZoneOffset.UTC)
 
-        assertTrue(text.contains(",Oil change,120.00,\"Pads, \"\"OEM\"\"\nrear\"\r\n"))
+        assertTrue(text.contains(",Oil change,120.00,\"Pads, \"\"OEM\"\"\nrear\",,,\r\n"))
     }
 
     @Test
@@ -88,7 +89,7 @@ class BackupSpreadsheetTests {
         val rows = lines(snapshot).drop(1)
 
         assertTrue(rows.all { it.startsWith("\"'=HYPERLINK(\"\"x\"\")\",'+55,") })
-        assertTrue(rows.last().endsWith(",'@sum"))
+        assertTrue(rows.last().endsWith(",'@sum,,,"))
     }
 
     @Test
@@ -153,5 +154,30 @@ class BackupSpreadsheetTests {
         val plates = lines(snapshot).drop(1).map { it.split(",")[1] }
 
         assertEquals(listOf("ABC1D23", "ABC1D23", "TWN0A00"), plates)
+    }
+
+    @Test
+    fun `fuel type and workshop fill their own columns`() {
+        val snapshot = BackupFixtures.fullSnapshot()
+
+        val rows = lines(snapshot).drop(1)
+
+        assertTrue(rows[0].endsWith(",Ethanol,,"))
+        assertTrue(rows[1].endsWith(",Synthetic 5W30,,Oficina do Zé,"))
+    }
+
+    @Test
+    fun `paid expenses become rows with their category and unpaid fines are left out`() {
+        val snapshot = BackupFixtures.fullSnapshot()
+        val toll = BackupFixtures.insurance.copy(id = UUID.randomUUID(), category = ExpenseCategory.PEDAGIO, odometer = null, note = "-ida", amount = BigDecimal("-8.30"))
+        val withToll = snapshot.copy(expenses = snapshot.expenses + toll)
+
+        val rows = lines(withToll).drop(1)
+
+        assertEquals(4, rows.size)
+        assertEquals("Gol,ABC1D23,Expense,2025-03-10,,,,,,-8.30,'-ida,,,Tolls", rows[2])
+        assertEquals("Gol,ABC1D23,Expense,2025-03-10,1650,,,,,2450.37,Apólice anual,,,Insurance", rows[3])
+        assertTrue(rows.none { it.contains("Traffic fine") })
+        assertTrue(lines(snapshot, portuguese).any { it.endsWith(";Seguro") })
     }
 }

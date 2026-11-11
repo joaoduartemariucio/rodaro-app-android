@@ -4,7 +4,9 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import br.com.joaoduartemariucio.rodaro.calculations.BackupFixtures
 import br.com.joaoduartemariucio.rodaro.data.backup.repositories.RoomBackupRepository
+import br.com.joaoduartemariucio.rodaro.data.costs.repositories.RoomExpenseRepository
 import br.com.joaoduartemariucio.rodaro.data.database.RodaroDatabase
+import br.com.joaoduartemariucio.rodaro.data.dues.repositories.RoomDueItemRepository
 import br.com.joaoduartemariucio.rodaro.data.fueling.repositories.RoomFuelEntryRepository
 import br.com.joaoduartemariucio.rodaro.data.maintenance.repositories.RoomServiceRepository
 import br.com.joaoduartemariucio.rodaro.data.trips.repositories.RoomRouteRepository
@@ -31,6 +33,8 @@ class RoomBackupRepositoryTests {
     private val fuel = RoomFuelEntryRepository(database.fuelEntries(), database.vehicles())
     private val services = RoomServiceRepository(database.services(), database.vehicles())
     private val routes = RoomRouteRepository(database.tripRoutes())
+    private val expenses = RoomExpenseRepository(database.expenses(), database.vehicles())
+    private val dues = RoomDueItemRepository(database.dueItems(), database.vehicles())
 
     private val stored = BackupFixtures.snapshot(preferences = null, exportedAt = null)
 
@@ -93,5 +97,24 @@ class RoomBackupRepositoryTests {
             }
 
             assertEquals(stored, backup.snapshot())
+        }
+
+    @Test
+    fun `replacing round trips expenses and due items and removes old driver license items`() =
+        runTest {
+            seed()
+            val oldLicense = BackupFixtures.license.copy(id = UUID.randomUUID())
+            dues.save(oldLicense)
+            expenses.save(BackupFixtures.insurance)
+            val incoming = BackupFixtures.fullSnapshot().copy(preferences = null, exportedAt = null)
+
+            backup.replaceAll(incoming)
+
+            val snapshot = backup.snapshot()
+            assertEquals(incoming.copy(expenses = incoming.expenses.sortedBy { it.date }), snapshot)
+            assertEquals(listOf(BackupFixtures.license), dues.driverItems())
+
+            backup.replaceAll(BackupSnapshot())
+            assertEquals(BackupContents(0, 0, 0, 0, 0, 0, 0), backup.snapshot().contents)
         }
 }

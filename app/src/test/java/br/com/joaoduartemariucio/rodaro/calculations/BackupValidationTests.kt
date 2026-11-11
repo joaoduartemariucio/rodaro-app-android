@@ -112,4 +112,42 @@ class BackupValidationTests {
     fun `contents count every table`() {
         assertEquals(BackupContents(2, 1, 1, 1, 1), BackupFixtures.snapshot().contents)
     }
+
+    @Test
+    fun `a full snapshot with a driver license that has no vehicle is valid`() {
+        assertTrue(BackupValidation.problems(BackupFixtures.fullSnapshot()).isEmpty())
+    }
+
+    @Test
+    fun `repeated expense and due item ids are reported`() {
+        val snapshot =
+            BackupFixtures.fullSnapshot().let {
+                it.copy(expenses = it.expenses + BackupFixtures.fine.copy(note = "Copy"), dueItems = it.dueItems + BackupFixtures.license)
+            }
+
+        assertEquals(
+            listOf<BackupProblem>(
+                BackupProblem.DuplicateId(BackupTable.EXPENSES, BackupFixtures.fine.id),
+                BackupProblem.DuplicateId(BackupTable.DUE_ITEMS, BackupFixtures.license.id),
+            ),
+            BackupValidation.problems(snapshot),
+        )
+    }
+
+    @Test
+    fun `expenses and due items for a vehicle that is not in the file are reported`() {
+        val snapshot =
+            BackupFixtures.fullSnapshot().copy(
+                expenses = listOf(BackupFixtures.insurance.copy(vehicleId = orphanId)),
+                dueItems = listOf(BackupFixtures.ipva.copy(vehicleId = orphanId), BackupFixtures.license),
+            )
+
+        assertEquals(
+            listOf<BackupProblem>(
+                BackupProblem.MissingVehicle(BackupTable.EXPENSES, BackupFixtures.insurance.id, orphanId),
+                BackupProblem.MissingVehicle(BackupTable.DUE_ITEMS, BackupFixtures.ipva.id, orphanId),
+            ),
+            BackupValidation.problems(snapshot),
+        )
+    }
 }

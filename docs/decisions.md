@@ -7,6 +7,20 @@ why, and what it costs. Newest first within each group. Product decisions are sh
 
 ## Platform parity
 
+### Android: phase A features are Android only, so the backup file moved to version 2
+
+Fuel types, vehicle fuel capability, UF and model year, workshop, other expenses, due items
+(IPVA, licenciamento, seguro, CNH) and the nine new service kinds exist only on Android for now.
+The backup writes them as new keys and bumps `formatVersion` to **2**.
+
+- **Why bump:** restore replaces everything. An iOS app or an older Android build reading the
+  new keys as unknown would silently drop expenses, due items and fuel types — real data loss.
+  With version 2 those readers refuse the file with "update the app" instead.
+- **Cost:** Android backups cannot be restored on iOS until iOS adds a version 2 branch. The
+  reader still decodes version 1 through the same branch, and `backup/v1.json` keeps passing.
+- **New service kinds on iOS:** their raw values (`timingBelt`, `chainKit`, …) are unknown there
+  and decode as `other`, the existing fallback. Acceptable until iOS adds them.
+
 ### Android: privacy controls (LGPD)
 
 Result of an LGPD audit (2026-11-06). The privacy policy v2 describes all of it.
@@ -215,10 +229,20 @@ types read it from a plain `Context` without a repository or a coroutine graph.
 ### Two independent notification switches
 
 "Push" (`pushEnabled`) gates the remote FCM channel (`PushMessagingService` drops messages when
-off) and "Maintenance reminders" (`remindersEnabled`) gates local WorkManager jobs
+off) and "Reminders" (`remindersEnabled`) gates local WorkManager jobs
 (`ServiceReminderSync` cancels every pending reminder and `ReminderWorker` returns early when
 off). One combined switch would force users who want local oil-change alerts to also accept
 marketing push, or the opposite.
+
+### One reminders switch for maintenance, documents and fines
+
+Document (IPVA, licenciamento, seguro, CNH) and fine reminders reuse `remindersEnabled`, now
+labelled "Lembretes — Manutenção, documentos e multas". The preference key and the
+notification channel id did not change.
+
+- **Why:** a second switch would need a category on `Reminder`, in the worker's input data and
+  in the "cancel everything" path. One local-reminders switch keeps all of that unchanged.
+- **Cost:** a user cannot keep oil-change alerts and silence IPVA ones.
 
 ### Android: the app language goes through the platform `LocaleManager`
 
@@ -237,6 +261,41 @@ reapplies it on the next launch. `android:localeConfig` stays; older versions ig
 - **Cost:** two code paths for one setting.
 
 ## Data entry
+
+### Refunds are a toggle, not a negative mask
+
+Expense amounts may be negative (a refund or reimbursement), but the digit-shifting
+`NumberInput` mask has no minus sign. The expense form has an "Estorno/reembolso" switch that
+negates the parsed amount; editing a negative expense shows the absolute value with the switch on.
+
+### Default service intervals are suggestions; confirm in the manual
+
+A new reminder rule starts with `ServiceDefaults.interval(kind, vehicleKind)` (oil 10 000 km /
+12 months for cars, 3 000 km / 6 months for motorcycles, …), shown in the user's distance unit.
+Changing the service, or the vehicle kind, replaces the values only while they are empty or still
+the previous suggestion, compared as displayed text, so a number the user typed is never
+overwritten. While a suggestion is shown the row says "Sugestão; confirme no manual do veículo";
+the hint is stronger for timing belt, transmission oil and every motorcycle service, where models
+vary most. Rules whose kind no longer applies to the vehicle kind are kept and still offered.
+
+### The service grid only shows services that apply
+
+`ServiceApplicability` lists the services per vehicle kind (no chain for cars, no timing belt for
+motorcycles; `other` always last). Editing an entry of a kind that no longer applies still offers
+that kind, so old data stays editable.
+
+### Fuel type is required on new fuel-ups, never on old ones
+
+A new fuel-up starts with the last typed fuel if the vehicle still takes it, or the only fuel it
+takes; a flex car with no typed history must pick one (a blocking issue). Editing a legacy
+fuel-up with no type is allowed and keeps it unknown. When the type changes and the price is still
+the suggestion, the price follows the latest price of the new type (or clears when there is none).
+
+### Model year is a plain four-digit field
+
+`NumberInput.Style.Integer` groups thousands ("2.024"), so the model year is a digits-only
+`String` of at most four characters. It must be between 1900 and next year, taken from the
+injected clock.
 
 ### Odometer out of order is a warning, not an error
 
@@ -315,8 +374,8 @@ out. `BackupRulesTests` checks that the three sections list the same files.
 
 Profile → Backup and export writes a JSON file through the Storage Access Framework
 (`CreateDocument`) and restores one picked with `OpenDocument`. The file is
-`{ format: "rodaro.backup", formatVersion: 1, exportedAt, app, vehicles, fuelEntries,
-serviceEntries, serviceRules, savedRoutes, preferences }`: money as plain decimal strings,
+`{ format: "rodaro.backup", formatVersion: 2, exportedAt, app, vehicles, fuelEntries,
+serviceEntries, serviceRules, savedRoutes, expenses, dueItems, preferences }`: money as plain decimal strings,
 instants in UTC with milliseconds, lowercase UUIDs (read case-insensitively), enums by their
 raw value (`"car"`, `"oilChange"`, `"BRL"`, `"metric"`, `"pt-BR"`, `"system"`) and the route path as
 a precision-6 polyline. `JsonBackupCodec` reads it; `BackupValidation` (Domain) rejects files
@@ -355,6 +414,14 @@ screen show what is in the file next to what is on the phone and ask before repl
   suggests exporting first. Files are capped at 32 MB of text.
 - **iOS parity:** the format is shared. `app/src/test/resources/backup/v1.json` is the contract:
   it is never edited, and both apps must keep decoding it.
+- **Version 2:** adds `fuelCapability`, `uf` and `modelYear` to vehicles, `fuelType` and
+  `createdAt` to fuel-ups, `workshop` and `createdAt` to services, and the `expenses` and
+  `dueItems` arrays (local dates as `"yyyy-MM-dd"`, fines nested under `fine`). A v1 file reads
+  with flex vehicles, unknown fuel types, `createdAt` equal to the date and no expenses. An unknown
+  fuel type stays unknown, an unknown expense category becomes `other` and a due item of an
+  unknown kind is dropped. `backup/v2.json` is the new golden file and is never edited either.
+  `replaceAll` deletes `due_items` explicitly, because driver-license rows have no vehicle and the
+  cascade would not remove them. See "phase A features are Android only" for why it was bumped.
 
 ### Spreadsheet export is a read-only CSV
 
@@ -370,6 +437,10 @@ a leading `'` so a spreadsheet does not run it as a formula.
   to filter than one file per vehicle.
 - **Cost:** it cannot be restored — the JSON backup is the restorable format — and saved routes
   and reminder rules are not in it.
+- **Expenses:** three trailing columns were added (fuel type, workshop, category) and paid
+  expenses are rows of type "Despesa", with the odometer only when it was typed (rows without one
+  sort as 0 within the same date). Unpaid fines are left out, and so are due items: they are not
+  spending until paid, and once paid they appear as expenses.
 
 ## Quality gates
 
@@ -547,6 +618,70 @@ outside any composable. Both take a `Localizer`: Android resources in the app,
 
 ## Calculations
 
+### Fuel type is never guessed
+
+Legacy fuel-ups have `fuelType = null` (unknown) and stay that way; vehicles migrated from
+version 5 are flex. A full-to-full interval counts for a fuel group (gasolina = comum, aditivada
+and premium; etanol; diesel) only when the fill that opens it, every partial inside it, the full
+fill before it and the partials before that are all the same group, and no record of the interval
+has an anomaly. The closing fill does not matter: it measures fuel already burned. The first
+interval after a switch is therefore discarded, and so is the first interval ever. Per-fuel
+averages sum km and liters; they never average ratios. Trip cost uses the average of the most
+recent fuel group when it has qualifying intervals, and the overall average otherwise.
+
+### Etanol ou gasolina: personal ratio with a general-rule fallback
+
+`FuelRatio.estimate` compares etanol and gasolina km/L from the vehicle's own intervals ending in
+the last 12 months. It trusts them only with at least 3 intervals and 600 km (car) or 300 km
+(motorcycle) per fuel, and only when the ratio is between 0.60 and 0.85; otherwise it falls back to
+the 70% general rule and says why: not enough data, always alternating (two or more intervals in
+the window discarded only by a switch — "abasteça 2 vezes seguidas com o mesmo combustível") or
+inconsistent data. The advisor always shows which basis it used. Etanol is cheaper when its price
+is below gasolina × ratio, compared unrounded; the threshold is rounded to 3 decimals only for
+display. Cost per km is shown only with the personal ratio. The advisor is hidden for vehicles
+that are not flex.
+
+### No GNV yet
+
+GNV is sold by m³ and lives in a separate cylinder, so it does not fit liters, tank capacity or
+the full-to-full rule. It needs its own model; until then it is not a fuel type.
+
+### Expenses: cash vs accrual
+
+Other expenses have two views. **Cash** (by paid date) feeds monthly spending, "total spent",
+per-category totals and the Profile. **Accrual** feeds cost per km: fixed costs (IPVA,
+licenciamento, seguro) are prorated by days over their coverage — the typed period, or by default
+the calendar year of the date for IPVA and 12 months from the date for the others — and variable
+ones count on their date.
+
+| Category | Fixed | In cost/km | In total spent |
+|---|---|---|---|
+| IPVA, licenciamento, seguro | yes | accrued | yes |
+| Pedágio, estacionamento, lavagem, outros | no | yes | yes |
+| Multa | no | no — shown apart as "evitável" | yes, once paid |
+| Financiamento | no | no — it would double count depreciation | yes |
+| Acessórios | no | no | yes |
+
+`CostSummary.totalCost` (cost/km basis) = fuel + services + accrued expenses; `totalSpent` =
+fuel + services + paid expenses in cash. All-time accrual uses the span of the fuel and service
+records; a `CostPeriod` (for the yearly review) filters by date and interpolates the odometer at
+both ends. An unpaid fine is in neither total.
+
+### An expense odometer is not a reading
+
+The odometer on an expense is optional and informative. It stays out of `Odometer.samples`, so
+the expense form has no odometer validation and an expense never changes the km/month pace,
+forecasts or reminders.
+
+### Fines: points belong to the driver; the 40% discount is mentioned, never advised
+
+Choosing a severity fills the CTB value (leve R$ 88,38 / 3 pts … gravíssima R$ 293,47 / 7 pts)
+less the chosen discount, only while the amount and points are untouched. Points are labelled as
+the driver's and never summed as "your points". The 40% SNE discount shows a caveat that it waives
+the appeal; the app never recommends it. A fine can be logged unpaid (`FineDetails.isPaid`), with
+an "a pagar" badge, out of every total and with reminders from its due date; marking it paid means
+editing it.
+
 ### Money is `BigDecimal`; distance and volume are `Double`
 
 Prices and totals never go through floating-point arithmetic. `Double.toDecimal()` converts
@@ -575,7 +710,53 @@ dates, so tests pin `ZoneOffset.UTC` the way the iOS tests pin a UTC calendar.
 
 A reading that goes backwards is bad data; returning the maximum would hide it.
 
+## Documents and due dates
+
+### Due dates are entered by the user; no built-in state calendar
+
+IPVA and licenciamento calendars change every year and per state; a wrong date is worse than
+none. The form shows "Final da placa N — consulte o calendário da Sefaz/Detran (UF)" with the
+plate's last digit and the vehicle's UF, and the user types the date.
+
+### IPVA installments are separate items, no parent
+
+Each parcela is its own due item with "1/3"-style numbers. There is no parent record to keep in
+sync; marking one paid affects only that one.
+
+### Marking paid creates an expense with the same id
+
+Paying a vehicle's item (optionally) saves an `Expense` of the same kind with
+`id = dueItem.id`, then the item with `paidAt`, then suggests next year's item (same day + 1
+year, no amount, same installment numbers) for IPVA, licenciamento and seguro.
+
+- **Why the same id:** the expense save is an upsert, so retrying after a failure between the
+  two writes never duplicates it, and the two records are linked without an extra column.
+- **Cost:** the two writes are not one transaction; after such a failure the item still shows
+  unpaid until the retry. Because the ids collide across types, timeline and due-item list keys
+  are prefixed by type (`"expense-…"`, `"due-…"`, `"fuel-…"`, `"service-…"`).
+
+### CNH lives on no vehicle, in the Profile
+
+The driver's license is a due item with `vehicleId = null`, shown in Profile → Motorista. Marking
+it renewed only sets `paidAt`: there is no expense category for it and validity depends on age, so
+no next-year item is suggested. Its reminders mention the automatic renewal for good drivers.
+Saving or paying it syncs reminders, since the Profile is not one of the screens that sync on load.
+
 ## Reminders
+
+### Document and fine reminders: every stage at once, weekly when overdue
+
+Lead times, all at 9:00: IPVA 15, 3 days and the day; licenciamento 30, 7 and the day; seguro 30
+and 7; CNH 60 and 30. An unpaid item then repeats weekly for 4 weeks and stops. Unpaid fines with a
+due date fire 7 days before and on the day. Paid items and items of archived vehicles get none.
+
+- **How:** `ReminderPlan.dueReminders` and `fineReminders` return every future stage, each with a
+  deterministic id `UUID.nameUUIDFromBytes("$recordId:$stage")`. `ServiceReminderSync` plans
+  services, due items and fines in one pass and cancels any pending id it did not plan, so past
+  stages and paid items disappear on the next sync.
+- **Why not one pending notification per item like services:** services re-plan from a moving
+  forecast; these dates are fixed, and scheduling all stages means a reminder still fires if the
+  app is not opened between two of them.
 
 ### Reminders are re-planned from scratch on every sync
 
@@ -684,6 +865,13 @@ reminder with its status and progress, a km/L chart (two or more intervals) and 
 spending chart (months without records count as zero), then the history with an
 All / Fuel / Services filter. Adding records moved to a bottom bar so it is one tap.
 
+### The vehicle screen re-reads its vehicle on every load
+
+`VehicleDetailViewModel` used to keep the `Vehicle` it was opened with, so an edit was not
+reflected until the screen was reopened. Now capability, UF and kind drive the fuel picker, the
+advisor and the service grid, so `load()` re-reads the vehicle and keeps the current one if it is
+gone.
+
 ### New fuel-ups start with the last price
 
 The price per liter is filled in from the latest fuel-up, with a footer saying so. Most
@@ -691,8 +879,9 @@ fill-ups happen at the same station, so this saves typing; the field stays edita
 
 ### Category colors
 
-Fuel is teal and services indigo everywhere (rows, charts, badges). Status uses green,
-orange and red, so fuel deliberately avoids orange. The values are Apple's system colors, so
+Fuel is teal, services indigo and other expenses brown (`Palette.expense`, Apple's system brown)
+everywhere (rows, charts, badges). Status uses green, orange and red, so fuel and expenses
+deliberately avoid orange. The values are Apple's system colors, so
 both apps look alike.
 
 ### Android: charts are drawn on a Canvas

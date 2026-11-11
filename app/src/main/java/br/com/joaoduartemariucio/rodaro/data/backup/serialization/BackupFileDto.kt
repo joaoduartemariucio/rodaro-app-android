@@ -13,6 +13,8 @@ data class BackupFileDto(
     val serviceEntries: List<ServiceEntryDto> = emptyList(),
     val serviceRules: List<ServiceRuleDto> = emptyList(),
     val savedRoutes: List<SavedRouteDto> = emptyList(),
+    val expenses: List<ExpenseDto> = emptyList(),
+    val dueItems: List<DueItemDto> = emptyList(),
     val preferences: PreferencesDto? = null,
 )
 
@@ -32,6 +34,9 @@ data class VehicleDto(
     val tankCapacityLiters: Double? = null,
     val createdAt: String,
     val isArchived: Boolean = false,
+    val fuelCapability: String = "flex",
+    val uf: String? = null,
+    val modelYear: Int? = null,
 )
 
 @Serializable
@@ -43,6 +48,8 @@ data class FuelEntryDto(
     val liters: Double,
     val pricePerLiter: String,
     val isFullTank: Boolean,
+    val fuelType: String? = null,
+    val createdAt: String? = null,
 )
 
 @Serializable
@@ -54,6 +61,8 @@ data class ServiceEntryDto(
     val odometerKm: Double,
     val cost: String,
     val notes: String = "",
+    val workshop: String? = null,
+    val createdAt: String? = null,
 )
 
 @Serializable
@@ -82,6 +91,45 @@ data class SavedRouteDto(
     val costPerKilometer: String,
     val createdAt: String,
     val pathPolyline6: String = "",
+)
+
+@Serializable
+data class ExpenseDto(
+    val id: String,
+    val vehicleId: String,
+    val category: String,
+    val date: String,
+    val amount: String,
+    val odometerKm: Double? = null,
+    val note: String = "",
+    val coverageStart: String? = null,
+    val coverageEnd: String? = null,
+    val fine: FineDto? = null,
+    val createdAt: String? = null,
+)
+
+@Serializable
+data class FineDto(
+    val infractionDate: String? = null,
+    val severity: String? = null,
+    val points: Int? = null,
+    val dueDate: String? = null,
+    val discount: String = "none",
+    val isPaid: Boolean = true,
+)
+
+@Serializable
+data class DueItemDto(
+    val id: String,
+    val vehicleId: String? = null,
+    val kind: String,
+    val dueDate: String,
+    val amount: String? = null,
+    val paidAt: String? = null,
+    val installmentNumber: Int? = null,
+    val installmentCount: Int? = null,
+    val note: String = "",
+    val createdAt: String,
 )
 
 @Serializable

@@ -7,6 +7,7 @@ import br.com.joaoduartemariucio.rodaro.domain.common.calculations.sum
 import br.com.joaoduartemariucio.rodaro.domain.common.entities.sortedChronologically
 import br.com.joaoduartemariucio.rodaro.domain.costs.calculations.Cost
 import br.com.joaoduartemariucio.rodaro.domain.costs.calculations.CostSummary
+import br.com.joaoduartemariucio.rodaro.domain.costs.entities.Expense
 import br.com.joaoduartemariucio.rodaro.domain.fueling.calculations.Consumption
 import br.com.joaoduartemariucio.rodaro.domain.fueling.calculations.ConsumptionInterval
 import br.com.joaoduartemariucio.rodaro.domain.fueling.entities.FuelEntry
@@ -32,8 +33,9 @@ class VehicleStats(
     rules: List<ServiceRule> = emptyList(),
     now: Instant,
     zone: ZoneId = ZoneId.systemDefault(),
+    expenses: List<Expense> = emptyList(),
 ) {
-    data class DueItem(
+    data class ServiceDueItem(
         val due: ServiceDue,
         val status: MaintenanceStatus,
     ) {
@@ -55,9 +57,9 @@ class VehicleStats(
     val cost: CostSummary
     val spentThisMonth: BigDecimal
     val lastPricePerLiter: BigDecimal?
-    val dues: List<DueItem>
+    val dues: List<ServiceDueItem>
 
-    val nextDue: DueItem? get() = dues.firstOrNull()
+    val nextDue: ServiceDueItem? get() = dues.firstOrNull()
 
     val attentionLevel: MaintenanceStatus.Level? get() = dues.maxOfOrNull { it.status.level }
 
@@ -72,7 +74,7 @@ class VehicleStats(
         consumptionHistory = intervals
         consumptionByEntry = consumptionByEntry(fuel, intervals)
         kilometersPerMonth = Maintenance.averageKilometersPerMonth(samples)
-        cost = Cost.summary(fuel, services)
+        cost = Cost.summary(fuel, services, expenses, samples, null, zone)
         lastPricePerLiter = fuel.sortedChronologically().lastOrNull()?.pricePerLiter
 
         val monthStart = now.monthStart(zone)
@@ -80,14 +82,15 @@ class VehicleStats(
         val inThisMonth = { date: Instant -> date >= monthStart && date < nextMonth }
         spentThisMonth =
             fuel.filter { inThisMonth(it.date) }.map { it.totalCost }.sum() +
-            services.filter { inThisMonth(it.date) }.map { it.cost }.sum()
+            services.filter { inThisMonth(it.date) }.map { it.cost }.sum() +
+            expenses.filter { it.isPaid && inThisMonth(it.date) }.map { it.amount }.sum()
 
         dues =
             rules
                 .mapNotNull { Maintenance.due(it, vehicle, services, samples, zone) }
-                .map { DueItem(it, Maintenance.status(it, current, now, zone)) }
+                .map { ServiceDueItem(it, Maintenance.status(it, current, now, zone)) }
                 .sortedWith(
-                    compareByDescending<DueItem> { it.status.level }
+                    compareByDescending<ServiceDueItem> { it.status.level }
                         .then(Maintenance.byDueDate { it.due.forecast.dueDate })
                         .thenBy { it.due.rule.kind.rawValue },
                 )

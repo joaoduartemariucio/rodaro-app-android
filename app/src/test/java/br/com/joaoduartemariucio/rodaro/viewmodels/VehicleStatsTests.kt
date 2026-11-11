@@ -3,6 +3,7 @@ package br.com.joaoduartemariucio.rodaro.viewmodels
 import br.com.joaoduartemariucio.rodaro.R
 import br.com.joaoduartemariucio.rodaro.calculations.assertDecimal
 import br.com.joaoduartemariucio.rodaro.calculations.day
+import br.com.joaoduartemariucio.rodaro.calculations.expense
 import br.com.joaoduartemariucio.rodaro.calculations.full
 import br.com.joaoduartemariucio.rodaro.calculations.partial
 import br.com.joaoduartemariucio.rodaro.calculations.rule
@@ -10,6 +11,9 @@ import br.com.joaoduartemariucio.rodaro.calculations.sample
 import br.com.joaoduartemariucio.rodaro.calculations.service
 import br.com.joaoduartemariucio.rodaro.calculations.testVehicleId
 import br.com.joaoduartemariucio.rodaro.calculations.utc
+import br.com.joaoduartemariucio.rodaro.domain.costs.entities.Expense
+import br.com.joaoduartemariucio.rodaro.domain.costs.entities.ExpenseCategory
+import br.com.joaoduartemariucio.rodaro.domain.costs.entities.FineDetails
 import br.com.joaoduartemariucio.rodaro.domain.fueling.entities.FuelEntry
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.calculations.MaintenanceForecast
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.calculations.MaintenanceStatus
@@ -48,7 +52,8 @@ class VehicleStatsTests {
         services: List<ServiceEntry> = emptyList(),
         rules: List<ServiceRule> = emptyList(),
         now: Int = 45,
-    ) = VehicleStats(vehicle, fuel, services, rules, day(now), utc)
+        expenses: List<Expense> = emptyList(),
+    ) = VehicleStats(vehicle, fuel, services, rules, day(now), utc, expenses)
 
     @Test
     fun `km per liter is attached to the fill-up that closes each interval`() {
@@ -73,6 +78,24 @@ class VehicleStatsTests {
             )
 
         assertDecimal("170", result.spentThisMonth)
+    }
+
+    @Test
+    fun `spending this month includes paid expenses and leaves unpaid fines out`() {
+        val result =
+            stats(
+                fuel = listOf(full(35, 1_400.0, 10.0)),
+                expenses =
+                    listOf(
+                        expense(ExpenseCategory.LAVAGEM, "40", dayOffset = 40),
+                        expense(ExpenseCategory.MULTA, "195.23", dayOffset = 41, fine = FineDetails(isPaid = false)),
+                        expense(ExpenseCategory.PEDAGIO, "99", dayOffset = 5),
+                    ),
+                now = 45,
+            )
+
+        assertDecimal("90", result.spentThisMonth)
+        assertDecimal("189", result.cost.totalSpent)
     }
 
     @Test
@@ -102,17 +125,17 @@ class VehicleStatsTests {
                 forecast = MaintenanceForecast(day(10), MaintenanceForecast.Trigger.DISTANCE, 11_000.0, null),
                 since = sample(0, 1_000.0),
             )
-        val passed = VehicleStats.DueItem(due, MaintenanceStatus(Level.DUE_SOON, 1.0, 500.0, -5))
-        val overdue = VehicleStats.DueItem(due, MaintenanceStatus(Level.OVERDUE, 1.0, -5.0, -5))
+        val passed = VehicleStats.ServiceDueItem(due, MaintenanceStatus(Level.DUE_SOON, 1.0, 500.0, -5))
+        val overdue = VehicleStats.ServiceDueItem(due, MaintenanceStatus(Level.OVERDUE, 1.0, -5.0, -5))
 
         assertTrue(passed.status.isEstimatePassed)
         assertEquals("Estimate passed", passed.relativeDue(localizer))
         assertFalse(overdue.status.isEstimatePassed)
         assertEquals((-5).formattedRelativeDays(localizer), overdue.relativeDue(localizer))
 
-        val dateless = VehicleStats.DueItem(due, MaintenanceStatus(Level.ON_TRACK, 0.5, 500.0, null))
+        val dateless = VehicleStats.ServiceDueItem(due, MaintenanceStatus(Level.ON_TRACK, 0.5, 500.0, null))
         assertEquals(500.0.formattedRemainingKilometers(localizer), dateless.relativeDue(localizer))
-        assertEquals("", VehicleStats.DueItem(due, MaintenanceStatus(Level.ON_TRACK, 0.5, null, null)).relativeDue(localizer))
+        assertEquals("", VehicleStats.ServiceDueItem(due, MaintenanceStatus(Level.ON_TRACK, 0.5, null, null)).relativeDue(localizer))
     }
 
     @Test
@@ -170,7 +193,7 @@ class VehicleStatsTests {
         assertEquals(3, levels.map { it.icon }.toSet().size)
         assertEquals(3, levels.map { it.color }.toSet().size)
         assertEquals(
-            3,
+            4,
             VehicleTimeline.Filter.entries
                 .map { localizer.string(it.label) }
                 .toSet()

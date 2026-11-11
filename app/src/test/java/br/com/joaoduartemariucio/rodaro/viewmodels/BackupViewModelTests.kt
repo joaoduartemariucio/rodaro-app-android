@@ -179,6 +179,18 @@ class BackupViewModelTests {
         }
 
     @Test
+    fun `the import counts include expenses and due items`() =
+        runTest {
+            val documents = InMemoryDocumentStore(mapOf("content://in" to backupFile(BackupFixtures.fullSnapshot())))
+            val viewModel = makeViewModel(documents = documents)
+
+            viewModel.prepareImport("content://in")
+
+            val state = assertIs<BackupViewModel.State.ConfirmingImport>(viewModel.state)
+            assertEquals(BackupContents(2, 1, 1, 1, 1, 2, 2), state.incoming)
+        }
+
+    @Test
     fun `preparing an import never writes to the repository`() =
         runTest {
             val repository = InMemoryBackupRepository()
@@ -214,7 +226,7 @@ class BackupViewModelTests {
 
             viewModel.prepareImport("content://in")
 
-            assertEquals(BackupError.NewerFormat(7, 1), assertIs<BackupViewModel.State.Failed>(viewModel.state).error)
+            assertEquals(BackupError.NewerFormat(7, 2), assertIs<BackupViewModel.State.Failed>(viewModel.state).error)
             assertEquals("newer_format", analytics.parameters("backup_import_failed")?.get("reason"))
         }
 

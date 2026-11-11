@@ -30,6 +30,19 @@ sealed interface ValidationIssue {
 
     data object RuleWithoutInterval : ValidationIssue
 
+    data object FuelTypeRequired : ValidationIssue
+
+    data object AmountRequired : ValidationIssue
+
+    data object CoverageEndBeforeStart : ValidationIssue
+
+    data object InstallmentInvalid : ValidationIssue
+
+    data class ModelYearOutOfRange(
+        val min: Int,
+        val max: Int,
+    ) : ValidationIssue
+
     val isBlocking: Boolean
         get() = this !is OdometerNotAfterPrevious && this !is OdometerNotBeforeNext
 
@@ -45,6 +58,11 @@ sealed interface ValidationIssue {
             PriceNotPositive -> localizer.string(R.string.issue_price_not_positive)
             CostNegative -> localizer.string(R.string.issue_cost_negative)
             RuleWithoutInterval -> localizer.string(R.string.issue_rule_without_interval)
+            FuelTypeRequired -> localizer.string(R.string.issue_fuel_type_required)
+            AmountRequired -> localizer.string(R.string.issue_amount_required)
+            CoverageEndBeforeStart -> localizer.string(R.string.issue_coverage_end_before_start)
+            InstallmentInvalid -> localizer.string(R.string.issue_installment_invalid)
+            is ModelYearOutOfRange -> localizer.string(R.string.issue_model_year_out_of_range, min.toString(), max.toString())
         }
 
     companion object {

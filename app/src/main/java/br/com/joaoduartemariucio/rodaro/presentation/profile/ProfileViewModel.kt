@@ -10,11 +10,15 @@ import br.com.joaoduartemariucio.rodaro.domain.common.services.Account
 import br.com.joaoduartemariucio.rodaro.domain.common.services.AccountService
 import br.com.joaoduartemariucio.rodaro.domain.common.services.Analytics
 import br.com.joaoduartemariucio.rodaro.domain.costs.calculations.Cost
+import br.com.joaoduartemariucio.rodaro.domain.costs.repositories.ExpenseRepository
+import br.com.joaoduartemariucio.rodaro.domain.dues.entities.DueItem
+import br.com.joaoduartemariucio.rodaro.domain.dues.repositories.DueItemRepository
 import br.com.joaoduartemariucio.rodaro.domain.fueling.repositories.FuelEntryRepository
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.repositories.ServiceRepository
 import br.com.joaoduartemariucio.rodaro.domain.preferences.entities.Preferences
 import br.com.joaoduartemariucio.rodaro.domain.preferences.repositories.PreferencesRepository
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.repositories.VehicleRepository
+import br.com.joaoduartemariucio.rodaro.presentation.reminders.ServiceReminderSync
 import java.math.BigDecimal
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -23,9 +27,12 @@ class ProfileViewModel(
     private val vehicleRepository: VehicleRepository,
     private val fuelEntryRepository: FuelEntryRepository,
     private val serviceRepository: ServiceRepository,
+    private val expenseRepository: ExpenseRepository,
+    private val dueItemRepository: DueItemRepository,
     private val preferencesRepository: PreferencesRepository,
     private val clearLocalData: suspend () -> Unit,
     private val analytics: Analytics = NoAnalytics,
+    private val reminders: ServiceReminderSync? = null,
 ) : ViewModel() {
     data class Summary(
         val vehicleCount: Int,
@@ -66,6 +73,9 @@ class ProfileViewModel(
     var preferences: Preferences by mutableStateOf(Preferences())
         private set
 
+    var driverItems: List<DueItem> by mutableStateOf(emptyList())
+        private set
+
     val notifications: NotificationsState
         get() =
             when {
@@ -93,6 +103,23 @@ class ProfileViewModel(
         refresh()
         loadPreferences()
         loadSummary()
+        loadDriverItems()
+    }
+
+    suspend fun driverItemsChanged() {
+        loadDriverItems()
+        loadSummary()
+        reminders?.sync()
+    }
+
+    private suspend fun loadDriverItems() {
+        driverItems =
+            try {
+                dueItemRepository.driverItems().sortedWith(compareBy<DueItem> { it.isPaid }.thenByDescending { it.dueDate })
+            } catch (failure: Exception) {
+                if (failure is CancellationException) throw failure
+                emptyList()
+            }
     }
 
     private suspend fun loadPreferences() {
@@ -112,9 +139,11 @@ class ProfileViewModel(
                 vehicles.forEach { vehicle ->
                     val fuel = fuelEntryRepository.entries(vehicle.id)
                     val services = serviceRepository.entries(vehicle.id)
-                    records += fuel.size + services.size
-                    spent += Cost.summary(fuel, services).totalCost
+                    val expenses = expenseRepository.expenses(vehicle.id)
+                    records += fuel.size + services.size + expenses.size
+                    spent += Cost.summary(fuel, services, expenses).totalSpent
                 }
+                records += dueItemRepository.all().size
                 Summary(
                     vehicleCount = vehicles.count { !it.isArchived },
                     recordCount = records,

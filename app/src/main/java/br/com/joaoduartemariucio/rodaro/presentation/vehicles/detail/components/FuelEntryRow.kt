@@ -31,6 +31,7 @@ import br.com.joaoduartemariucio.rodaro.presentation.common.formattedKilometers
 import br.com.joaoduartemariucio.rodaro.presentation.common.formattedLiters
 import br.com.joaoduartemariucio.rodaro.presentation.common.formattedPerLiter
 import br.com.joaoduartemariucio.rodaro.presentation.common.rememberLocalizer
+import br.com.joaoduartemariucio.rodaro.presentation.common.shortLabel
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -65,6 +66,7 @@ fun FuelEntryRow(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                entry.fuelType?.let { Tag(stringResource(it.shortLabel), Palette.fuel) }
                 consumption?.let { Tag(it.formattedConsumption(localizer), Palette.fuel) }
                 Tag(
                     stringResource(if (entry.isFullTank) R.string.full_tank else R.string.partial_fill),

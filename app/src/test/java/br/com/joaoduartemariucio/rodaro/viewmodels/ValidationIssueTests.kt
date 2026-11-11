@@ -64,6 +64,11 @@ class ValidationIssueTests {
                 ValidationIssue.PriceNotPositive,
                 ValidationIssue.CostNegative,
                 ValidationIssue.RuleWithoutInterval,
+                ValidationIssue.FuelTypeRequired,
+                ValidationIssue.ModelYearOutOfRange(1900, 2027),
+                ValidationIssue.AmountRequired,
+                ValidationIssue.CoverageEndBeforeStart,
+                ValidationIssue.InstallmentInvalid,
             )
 
         assertFalse(warnings.any { it.isBlocking })
@@ -85,9 +90,15 @@ class ValidationIssueTests {
                 ValidationIssue.PriceNotPositive,
                 ValidationIssue.CostNegative,
                 ValidationIssue.RuleWithoutInterval,
+                ValidationIssue.FuelTypeRequired,
+                ValidationIssue.ModelYearOutOfRange(1900, 2027),
+                ValidationIssue.AmountRequired,
+                ValidationIssue.CoverageEndBeforeStart,
+                ValidationIssue.InstallmentInvalid,
             )
 
         assertEquals(issues.size, issues.map { it.message(TestLocalizer()) }.toSet().size)
+        assertEquals("The model year must be between 1900 and 2027.", ValidationIssue.ModelYearOutOfRange(1900, 2027).message(TestLocalizer()))
     }
 
     @Test

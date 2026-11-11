@@ -2,6 +2,8 @@ package br.com.joaoduartemariucio.rodaro.calculations
 
 import br.com.joaoduartemariucio.rodaro.domain.fueling.calculations.Consumption
 import br.com.joaoduartemariucio.rodaro.domain.fueling.entities.FuelEntry
+import br.com.joaoduartemariucio.rodaro.domain.fueling.entities.FuelGroup
+import br.com.joaoduartemariucio.rodaro.domain.fueling.entities.FuelType
 import org.junit.Test
 import kotlin.math.abs
 import kotlin.test.assertEquals
@@ -125,5 +127,115 @@ class ConsumptionTests {
 
         assertEquals(day(3), interval?.startDate)
         assertEquals(day(13), interval?.endDate)
+    }
+
+    private val gasolina = FuelType.GASOLINA_COMUM
+    private val etanol = FuelType.ETANOL
+
+    private fun groups(records: List<FuelEntry>) = Consumption.intervals(records).map { it.fuelGroup }
+
+    @Test
+    fun `every gasoline grade counts as gasoline and the first interval never qualifies`() {
+        val records =
+            listOf(
+                full(0, 1_000.0, 40.0, fuelType = FuelType.GASOLINA_COMUM),
+                full(10, 1_400.0, 40.0, fuelType = FuelType.GASOLINA_ADITIVADA),
+                full(20, 1_800.0, 40.0, fuelType = FuelType.GASOLINA_PREMIUM),
+            )
+
+        assertEquals(listOf(null, FuelGroup.GASOLINA), groups(records))
+    }
+
+    @Test
+    fun `the first interval after a switch is discarded and the next one counts`() {
+        val records =
+            listOf(
+                full(0, 1_000.0, 40.0, fuelType = etanol),
+                full(10, 1_400.0, 40.0, fuelType = etanol),
+                full(20, 1_800.0, 40.0, fuelType = gasolina),
+                full(30, 2_200.0, 40.0, fuelType = gasolina),
+                full(40, 2_600.0, 40.0, fuelType = etanol),
+            )
+
+        val intervals = Consumption.intervals(records)
+
+        assertEquals(listOf(null, FuelGroup.ETANOL, null, FuelGroup.GASOLINA), intervals.map { it.fuelGroup })
+        assertEquals(listOf(false, false, true, false), intervals.map { it.isAfterFuelSwitch })
+    }
+
+    @Test
+    fun `a partial fill of another fuel discards its interval and the next one`() {
+        val records =
+            listOf(
+                full(0, 1_000.0, 40.0, fuelType = gasolina),
+                full(10, 1_400.0, 40.0, fuelType = gasolina),
+                partial(15, 1_600.0, 10.0, fuelType = etanol),
+                full(20, 1_800.0, 30.0, fuelType = gasolina),
+                full(30, 2_200.0, 40.0, fuelType = gasolina),
+                full(40, 2_600.0, 40.0, fuelType = gasolina),
+            )
+
+        assertEquals(listOf(null, null, null, FuelGroup.GASOLINA), groups(records))
+    }
+
+    @Test
+    fun `an unknown fuel type is never guessed`() {
+        val records =
+            listOf(
+                full(0, 1_000.0, 40.0, fuelType = gasolina),
+                full(10, 1_400.0, 40.0),
+                full(20, 1_800.0, 40.0, fuelType = gasolina),
+                full(30, 2_200.0, 40.0, fuelType = gasolina),
+                full(40, 2_600.0, 40.0, fuelType = gasolina),
+            )
+
+        val intervals = Consumption.intervals(records)
+
+        assertEquals(listOf(null, null, null, FuelGroup.GASOLINA), intervals.map { it.fuelGroup })
+        assertTrue(intervals.none { it.isAfterFuelSwitch })
+    }
+
+    @Test
+    fun `an interval with an anomalous record is discarded`() {
+        val records =
+            listOf(
+                full(0, 1_000.0, 40.0, fuelType = gasolina),
+                full(10, 1_400.0, 40.0, fuelType = gasolina),
+                partial(15, 1_400.0, 5.0, fuelType = gasolina),
+                full(20, 1_800.0, 35.0, fuelType = gasolina),
+            )
+
+        assertEquals(listOf(null, null), groups(records))
+    }
+
+    @Test
+    fun `the average per fuel sums kilometers and liters instead of averaging ratios`() {
+        val records =
+            listOf(
+                full(0, 1_000.0, 40.0, fuelType = etanol),
+                full(10, 1_400.0, 40.0, fuelType = etanol),
+                full(20, 1_800.0, 40.0, fuelType = etanol),
+                full(30, 2_100.0, 20.0, fuelType = etanol),
+            )
+
+        val byGroup = Consumption.averageByGroup(records)
+
+        assertEquals(setOf(FuelGroup.ETANOL), byGroup.keys)
+        assertEquals(700.0 / 60.0, byGroup.getValue(FuelGroup.ETANOL), 0.000_001)
+        assertTrue(Consumption.averageByGroup(listOf(full(0, 1_000.0, 40.0), full(10, 1_400.0, 40.0))).isEmpty())
+    }
+
+    @Test
+    fun `the latest group comes from the most recent typed fill-up`() {
+        val records =
+            listOf(
+                full(0, 1_000.0, 40.0, fuelType = gasolina),
+                full(10, 1_400.0, 40.0, fuelType = etanol),
+                full(20, 1_800.0, 40.0),
+            )
+
+        assertEquals(FuelGroup.ETANOL, Consumption.latestGroup(records))
+        assertNull(Consumption.latestGroup(listOf(full(0, 1_000.0, 40.0))))
+        assertNull(Consumption.averageOf(emptyList()))
     }
 }

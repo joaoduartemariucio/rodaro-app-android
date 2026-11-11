@@ -43,27 +43,40 @@ graph LR
 ## Domain
 
 Plain data classes and pure functions with no Android dependency, grouped by feature:
-`vehicles/`, `fueling/`, `maintenance/`, `costs/`, `reminders/`, and `common/` for what every
+`vehicles/`, `fueling/`, `maintenance/`, `costs/`, `dues/`, `reminders/`, and `common/` for what every
 feature uses (calendar math, decimals, chronology, `DateProvider`, `RepositoryError`). Inside
 each feature the usual folders: `entities/`, `repositories/` (interfaces), `calculations/`,
 `services/` (interfaces) and `errors/`, only the ones it needs.
 
-- **Entities** — `Vehicle`, `FuelEntry`, `ServiceEntry`, `ServiceRule`, `OdometerSample`.
+- **Entities** — `Vehicle` (with `FuelCapability`, UF and model year), `FuelEntry` (with
+  `FuelType`/`FuelGroup` and `createdAt`), `ServiceEntry` (with workshop and `createdAt`),
+  `ServiceRule`, `OdometerSample`, `Expense` (`ExpenseCategory`, `FineDetails`) in `costs/` and
+  `DueItem` (`DueKind`: IPVA, licenciamento, seguro, CNH) in `dues/`.
 - **Calculations** — one object per concern, each with its own tests:
-  - `Consumption` — km/L per interval between two full tanks, plus `anomalies(records)`
-    (odometer going backwards or unchanged, non-positive liters, duplicates).
-  - `Cost` — fuel and service totals, cost per km.
-  - `Odometer` — current reading, the full reading history of a vehicle, and
-    `neighbors(date, samples)` (the readings right before and after a date).
+  - `Consumption` — km/L per interval between two full tanks, the fuel group an interval
+    qualifies for, `averageByGroup`, plus `anomalies(records)` (odometer going backwards or
+    unchanged, non-positive liters, duplicates).
+  - `FuelRatio` and `FuelAdvisor` — the vehicle's etanol/gasolina ratio (or the 70% rule) and
+    which fuel is cheaper at the pump.
+  - `Cost` — fuel, service and expense totals, cash and accrual, cost per km, optionally for a
+    `CostPeriod`; `ExpenseAccrual` prorates fixed expenses by coverage days.
+  - `Odometer` — current reading, the full reading history of a vehicle,
+    `neighbors(date, samples)` (the readings right before and after a date) and
+    `interpolated(at, samples)`.
+  - `ServiceApplicability` and `ServiceDefaults` — which services apply to a car or a motorcycle
+    and their suggested intervals.
+  - `DueSchedule` (`dues/`) — lead times, status level, every reminder stage, next year's item and
+    the expense a payment creates.
   - `Maintenance` — km/month pace, next service date and odometer for a rule, and
     `status(due, currentOdometer, now, zone)` (on track / due soon / overdue, with progress).
   - `TripCost` (`trips/`) — fuel cost of a trip: total distance (doubled for a round trip) ÷
     km/L × price per liter, and cost per km.
-  - `ReminderPlan` — when to notify for each rule: 9:00 on the due day, or the next 9:00 when overdue.
+  - `ReminderPlan` — when to notify for each rule: 9:00 on the due day, or the next 9:00 when
+    overdue; plus `dueReminders` and `fineReminders`, every future stage of due items and unpaid fines.
   - `CalendarMath` — start of day, adding days and months, month start, days between: the
     `Calendar` operations of the iOS code, on `java.time` with an explicit `ZoneId`.
 - **Interfaces** — `VehicleRepository`, `FuelEntryRepository`, `ServiceRepository`,
-  `DateProvider`, `ReminderScheduler`. Everything `suspend` and returning entities.
+  `ExpenseRepository`, `DueItemRepository`, `DateProvider`, `ReminderScheduler`. Everything `suspend` and returning entities.
 - **Backup** (`backup/`) — `BackupSnapshot` (every table plus `PortablePreferences`),
   `BackupValidation` (repeated ids, records without their vehicle), `BackupError`, and the
   `BackupRepository`, `BackupCodec` and `DocumentStore` interfaces.
@@ -73,14 +86,17 @@ reading, so the same input always gives the same output.
 
 ## Data
 
-Grouped by feature like Domain: `vehicles/`, `fueling/` and `maintenance/` each have
+Grouped by feature like Domain: `vehicles/`, `fueling/`, `maintenance/`, `costs/` and `dues/` each have
 `models/` (Room entities and DAO), `mappers/` and `repositories/`; `reminders/services/` holds
 WorkManager; `database/` and `common/` hold what is shared.
 
 - **Room entities** — all suffixed `Model` (the layer rule relies on it), one DAO per feature,
   and `RodaroDatabase` in `database/`. Each record belongs to a vehicle through a foreign key with
   `ON DELETE CASCADE`; ids are UUIDs stored as text and money is stored as a decimal string.
-  The schema is exported to `app/schemas/` so migrations can be checked.
+  The schema is exported to `app/schemas/` so migrations can be checked. Version 6 added the
+  `expenses` and `due_items` tables (a driver-license item has a null `vehicleId`, which skips the
+  foreign key) and the new vehicle, fuel-up and service columns; `MIGRATION_5_6` is tested both
+  with raw SQL and by opening a migrated file with Room.
 - **Mappers** — Room model ⇄ entity, in both directions.
 - **Repositories** — one Room repository per interface. Every call goes through `persisting`,
   which wraps storage exceptions in `RepositoryError.PersistenceFailed` and lets domain errors
@@ -103,7 +119,8 @@ getters, exactly like computed properties on an `@Observable`.
 
 - **Lists and detail** load in a `LaunchedEffect` and reload after each write. Their
   ViewModels live in the Navigation 3 entry, so they survive configuration changes.
-- **Forms** (`VehicleForm`, `FuelEntryForm`, `ServiceEntryForm`) follow the same shape:
+- **Forms** (`VehicleForm`, `FuelEntryForm`, `ServiceEntryForm`, `ExpenseForm`, `DueItemForm`,
+  `DuePayment`) follow the same shape:
   - fields kept as `String` so "empty" and "zero" are different states;
   - `issues: List<ValidationIssue>` computed from the fields. Issues are either **blocking**
     (red, disable Save) or **warnings** (orange, informative only);
@@ -115,18 +132,25 @@ getters, exactly like computed properties on an `@Observable`.
   - `FormatStyles` — km, liters, km/L, currency and date formatting for display.
   - `Localizer` — localized strings for code outside composables (ViewModels' helpers and
     reminder text), backed by Android resources in the app and by `strings.xml` in tests.
-  - `Palette` — category colors (fuel, service) and status colors, labels and icons.
+  - `Palette` — category colors (fuel, service, expense) and status colors, labels and icons;
+    `ServiceKindDisplay`, `FuelTypeDisplay`, `ExpenseCategoryDisplay` and `DueKindDisplay` give each
+    enum its label and icon.
   - `SymbolBadge`, `MetricTileCard`, `StatusCapsule`, `ProgressBar` — shared building blocks
     of the dashboard cards.
   - `Modifier.dismissesKeyboard()` — tap outside, scroll or "Done" closes the keyboard.
 - **Vehicle dashboard** — `VehicleStats` gathers everything a card shows (consumption history,
   km/L per closing fill-up, this month's spending, every reminder with its status);
-  `VehicleTimeline` groups the history by month, filters it and builds the spending chart data.
+  `VehicleTimeline` groups the history (fuel-ups, services and expenses) by month, filters it and
+  builds the spending chart data. The detail screen also lists the vehicle's due items, opens the
+  etanol/gasolina advisor (`fueling/advisor/`) for flex vehicles and the expense, due-item and
+  payment dialogs (`costs/form/`, `dues/form/`, `dues/payment/`). The driver's license lives in the
+  Profile.
   Charts are drawn with Compose `Canvas` (`vehicles/detail/components/Charts.kt`).
-- **Reminders** — `ServiceReminderSync` re-plans service notifications at the end of the
-  list and detail `load()`: it gathers each active vehicle's records, asks
-  `ReminderPlan.reminders(records, now, zone)` (Domain) when each rule is due, cancels stale
-  notifications and schedules the rest through `ReminderScheduler`. See
+- **Reminders** — `ServiceReminderSync` re-plans notifications at the end of the
+  list and detail `load()` and after a driver-license change in the Profile: it gathers each
+  active vehicle's records, asks `ReminderPlan` (Domain) for service, due-item and fine reminders
+  in one pass, cancels every pending id it did not plan and schedules the rest through
+  `ReminderScheduler`. See
   [decisions](decisions.md#reminders).
 
 ## App

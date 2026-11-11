@@ -13,6 +13,8 @@ object FuelEntryMapper {
             liters = model.liters,
             pricePerLiter = model.pricePerLiter,
             isFullTank = model.isFullTank,
+            fuelType = model.fuelType,
+            createdAt = model.createdAt,
         )
 
     fun model(entity: FuelEntry): FuelEntryModel =
@@ -24,5 +26,7 @@ object FuelEntryMapper {
             liters = entity.liters,
             pricePerLiter = entity.pricePerLiter,
             isFullTank = entity.isFullTank,
+            fuelType = entity.fuelType,
+            createdAt = entity.createdAt,
         )
 }

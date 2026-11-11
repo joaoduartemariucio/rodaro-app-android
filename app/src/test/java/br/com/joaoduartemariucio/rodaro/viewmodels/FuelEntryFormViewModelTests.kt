@@ -11,8 +11,10 @@ import br.com.joaoduartemariucio.rodaro.calculations.service
 import br.com.joaoduartemariucio.rodaro.calculations.testVehicleId
 import br.com.joaoduartemariucio.rodaro.calculations.utc
 import br.com.joaoduartemariucio.rodaro.domain.common.errors.RepositoryError
+import br.com.joaoduartemariucio.rodaro.domain.fueling.entities.FuelType
 import br.com.joaoduartemariucio.rodaro.domain.preferences.entities.Preferences
 import br.com.joaoduartemariucio.rodaro.domain.preferences.entities.UnitSystem
+import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.FuelCapability
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.OdometerSample
 import br.com.joaoduartemariucio.rodaro.fakes.FixedDateProvider
 import br.com.joaoduartemariucio.rodaro.fakes.InMemoryFuelEntryRepository
@@ -42,7 +44,19 @@ class FuelEntryFormViewModelTests {
         repository: InMemoryFuelEntryRepository = InMemoryFuelEntryRepository(),
         otherReadings: List<OdometerSample> = emptyList(),
         suggestedPrice: BigDecimal? = null,
-    ) = FuelEntryFormViewModel(mode, repository, FixedDateProvider(day(30)), otherReadings, suggestedPrice)
+        capability: FuelCapability = FuelCapability.FLEX,
+        suggestedPrices: Map<FuelType, BigDecimal> = emptyMap(),
+        suggestedFuelType: FuelType? = FuelType.GASOLINA_COMUM,
+    ) = FuelEntryFormViewModel(
+        mode,
+        repository,
+        FixedDateProvider(day(30)),
+        otherReadings,
+        suggestedPrice,
+        fuelCapability = capability,
+        suggestedPrices = suggestedPrices,
+        suggestedFuelType = suggestedFuelType,
+    )
 
     private fun FuelEntryFormViewModel.fill(
         odometer: Double = 1_500.0,
@@ -217,4 +231,113 @@ class FuelEntryFormViewModelTests {
         assertEquals(37.85411784, viewModel.parsedLiters!!, 0.001)
         assertEquals(4.0, viewModel.parsedPrice!!.toDouble(), 0.001)
     }
+
+    @Test
+    fun `the picker only offers the fuels the vehicle can take`() {
+        assertEquals(FuelCapability.FLEX.fuelTypes, makeViewModel().availableFuelTypes)
+        assertEquals(
+            listOf(FuelType.DIESEL_S10, FuelType.DIESEL_S500),
+            makeViewModel(capability = FuelCapability.DIESEL, suggestedFuelType = null).availableFuelTypes,
+        )
+    }
+
+    @Test
+    fun `a new fuel-up starts with the last fuel type, or the only one the vehicle takes`() {
+        assertEquals(FuelType.ETANOL, makeViewModel(suggestedFuelType = FuelType.ETANOL).fuelType)
+        assertEquals(FuelType.ETANOL, makeViewModel(capability = FuelCapability.ETANOL, suggestedFuelType = null).fuelType)
+        assertNull(makeViewModel(capability = FuelCapability.DIESEL, suggestedFuelType = FuelType.ETANOL).fuelType)
+    }
+
+    @Test
+    fun `a flex vehicle with no history must pick a fuel before saving`() =
+        runTest {
+            val repository = InMemoryFuelEntryRepository()
+            val viewModel = makeViewModel(repository = repository, suggestedFuelType = null)
+            viewModel.fill()
+
+            assertEquals(listOf(ValidationIssue.FuelTypeRequired), viewModel.issues)
+            assertFalse(viewModel.canSave)
+
+            viewModel.fuelType = FuelType.ETANOL
+            viewModel.save()
+
+            assertEquals(FuelType.ETANOL, repository.entries(testVehicleId).single().fuelType)
+        }
+
+    @Test
+    fun `editing a legacy fuel-up without a type is allowed and keeps it unknown`() =
+        runTest {
+            val legacy = full(10, 1_200.0, 35.0, price = BigDecimal(6))
+            val repository = InMemoryFuelEntryRepository(listOf(legacy))
+            val viewModel = makeViewModel(FuelEntryFormViewModel.Mode.Edit(legacy), repository)
+
+            assertNull(viewModel.fuelType)
+            assertTrue(viewModel.issues.isEmpty())
+            viewModel.save()
+
+            assertNull(repository.entries(testVehicleId).single().fuelType)
+        }
+
+    @Test
+    fun `editing keeps a fuel type the vehicle no longer takes`() {
+        val diesel = full(10, 1_200.0, 35.0, fuelType = FuelType.DIESEL_S10)
+
+        val viewModel = makeViewModel(FuelEntryFormViewModel.Mode.Edit(diesel))
+
+        assertEquals(FuelType.DIESEL_S10, viewModel.fuelType)
+        assertEquals(FuelType.DIESEL_S10, viewModel.availableFuelTypes.last())
+    }
+
+    @Test
+    fun `the price follows the fuel type while it is still the suggestion`() {
+        val prices = mapOf(FuelType.GASOLINA_COMUM to decimal("6.19"), FuelType.ETANOL to decimal("4.09"))
+        val viewModel = makeViewModel(suggestedPrice = decimal("4.09"), suggestedPrices = prices)
+
+        assertDecimal("6.19", viewModel.parsedPrice)
+        assertTrue(viewModel.isUsingSuggestedPrice)
+
+        viewModel.fuelType = FuelType.ETANOL
+        assertDecimal("4.09", viewModel.parsedPrice)
+        assertTrue(viewModel.isUsingSuggestedPrice)
+
+        viewModel.fuelType = FuelType.GASOLINA_PREMIUM
+        assertEquals("", viewModel.pricePerLiter)
+        assertFalse(viewModel.isUsingSuggestedPrice)
+
+        viewModel.fuelType = FuelType.ETANOL
+        assertDecimal("4.09", viewModel.parsedPrice)
+        viewModel.pricePerLiter = NumberInput.text(decimal("3.99"), NumberInput.Style.FUEL_PRICE)
+        viewModel.fuelType = FuelType.GASOLINA_COMUM
+        assertDecimal("3.99", viewModel.parsedPrice)
+    }
+
+    @Test
+    fun `the suggested price for a fuel type is shown per gallon under the imperial system`() {
+        DisplayPreferences.update(Preferences(unitSystem = UnitSystem.IMPERIAL))
+        val prices = mapOf(FuelType.GASOLINA_COMUM to decimal("1"), FuelType.ETANOL to decimal("2"))
+        val viewModel = makeViewModel(suggestedPrices = prices)
+
+        viewModel.fuelType = FuelType.ETANOL
+
+        assertEquals(NumberInput.text(decimal("7.570823568"), NumberInput.Style.FUEL_PRICE), viewModel.pricePerLiter)
+        assertEquals(2.0, viewModel.parsedPrice!!.toDouble(), 0.001)
+    }
+
+    @Test
+    fun `createdAt is now on create and unchanged on edit`() =
+        runTest {
+            val repository = InMemoryFuelEntryRepository()
+            val created = makeViewModel(repository = repository)
+            created.fill()
+            created.date = day(3)
+            created.save()
+            assertEquals(day(30), repository.entries(testVehicleId).single().createdAt)
+            assertEquals(day(3), repository.entries(testVehicleId).single().date)
+
+            val existing = full(10, 1_200.0, 35.0).copy(createdAt = day(12))
+            val editRepository = InMemoryFuelEntryRepository(listOf(existing))
+            val edited = makeViewModel(FuelEntryFormViewModel.Mode.Edit(existing), editRepository)
+            edited.save()
+            assertEquals(day(12), editRepository.entries(testVehicleId).single().createdAt)
+        }
 }

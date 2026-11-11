@@ -9,6 +9,8 @@ enum class BackupTable {
     SERVICE_ENTRIES,
     SERVICE_RULES,
     SAVED_ROUTES,
+    EXPENSES,
+    DUE_ITEMS,
 }
 
 sealed interface BackupProblem {
@@ -32,9 +34,13 @@ object BackupValidation {
             duplicates(BackupTable.SERVICE_ENTRIES, snapshot.serviceEntries.map { it.id }) +
             duplicates(BackupTable.SERVICE_RULES, snapshot.serviceRules.map { it.id }) +
             duplicates(BackupTable.SAVED_ROUTES, snapshot.savedRoutes.map { it.id }) +
+            duplicates(BackupTable.EXPENSES, snapshot.expenses.map { it.id }) +
+            duplicates(BackupTable.DUE_ITEMS, snapshot.dueItems.map { it.id }) +
             missing(BackupTable.FUEL_ENTRIES, snapshot.fuelEntries.map { it.id to it.vehicleId }, vehicleIds) +
             missing(BackupTable.SERVICE_ENTRIES, snapshot.serviceEntries.map { it.id to it.vehicleId }, vehicleIds) +
-            missing(BackupTable.SERVICE_RULES, snapshot.serviceRules.map { it.id to it.vehicleId }, vehicleIds)
+            missing(BackupTable.SERVICE_RULES, snapshot.serviceRules.map { it.id to it.vehicleId }, vehicleIds) +
+            missing(BackupTable.EXPENSES, snapshot.expenses.map { it.id to it.vehicleId }, vehicleIds) +
+            missing(BackupTable.DUE_ITEMS, snapshot.dueItems.mapNotNull { item -> item.vehicleId?.let { item.id to it } }, vehicleIds)
     }
 
     private fun duplicates(

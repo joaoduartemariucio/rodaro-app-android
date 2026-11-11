@@ -5,11 +5,16 @@ import br.com.joaoduartemariucio.rodaro.domain.common.calculations.daysBetween
 import br.com.joaoduartemariucio.rodaro.domain.common.calculations.plusDays
 import br.com.joaoduartemariucio.rodaro.domain.common.calculations.startOfDay
 import br.com.joaoduartemariucio.rodaro.domain.common.entities.sortedChronologically
+import br.com.joaoduartemariucio.rodaro.domain.costs.entities.Expense
+import br.com.joaoduartemariucio.rodaro.domain.costs.entities.ExpenseCategory
+import br.com.joaoduartemariucio.rodaro.domain.dues.calculations.DueSchedule
+import br.com.joaoduartemariucio.rodaro.domain.dues.entities.DueItem
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.calculations.Maintenance
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.calculations.MaintenanceStatus
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.calculations.ServiceDue
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.calculations.Odometer
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.OdometerSample
+import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.Vehicle
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.VehicleRecords
 import java.time.Instant
 import java.time.ZoneId
@@ -18,6 +23,7 @@ object ReminderPlan {
     const val HOUR_OF_DAY = 9
     const val DAILY_OVERDUE_DAYS = 7
     const val OVERDUE_REPEAT_DAYS = 7
+    val FINE_LEAD_DAYS = listOf(7, 0)
 
     fun reminders(
         records: List<VehicleRecords>,
@@ -67,6 +73,39 @@ object ReminderPlan {
             .map { it.atHour(HOUR_OF_DAY, zone) }
             .filter { it > now }
             .minOrNull()
+    }
+
+    fun dueReminders(
+        items: List<DueItem>,
+        vehicles: List<Vehicle>,
+        now: Instant,
+        zone: ZoneId = ZoneId.systemDefault(),
+    ): List<PlannedDueReminder> {
+        val active = vehicles.filter { !it.isArchived }.associateBy { it.id }
+        return items
+            .flatMap { item ->
+                val vehicleId = item.vehicleId
+                val vehicle = vehicleId?.let { active[it] ?: return@flatMap emptyList() }
+                DueSchedule.stages(item, now, zone).map { (stage, fireDate) -> PlannedDueReminder(item, vehicle, stage, fireDate) }
+            }.sortedWith(compareBy<PlannedDueReminder>({ it.fireDate }, { it.id.toString() }))
+    }
+
+    fun fineReminders(
+        expenses: List<Expense>,
+        vehicles: List<Vehicle>,
+        now: Instant,
+        zone: ZoneId = ZoneId.systemDefault(),
+    ): List<PlannedFineReminder> {
+        val active = vehicles.filter { !it.isArchived }.associateBy { it.id }
+        return expenses
+            .filter { it.category == ExpenseCategory.MULTA && !it.isPaid }
+            .flatMap { expense ->
+                val vehicle = active[expense.vehicleId] ?: return@flatMap emptyList()
+                val dueDate = expense.fine?.dueDate ?: return@flatMap emptyList()
+                DueSchedule
+                    .stages(dueDate, FINE_LEAD_DAYS, 0, now, zone)
+                    .map { (stage, fireDate) -> PlannedFineReminder(expense, vehicle, dueDate, stage, fireDate) }
+            }.sortedWith(compareBy<PlannedFineReminder>({ it.fireDate }, { it.id.toString() }))
     }
 
     fun overdueSince(

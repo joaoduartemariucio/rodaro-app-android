@@ -40,7 +40,7 @@ import br.com.joaoduartemariucio.rodaro.presentation.vehicles.VehicleStats
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun ServiceDueRow(item: VehicleStats.DueItem) {
+fun ServiceDueRow(item: VehicleStats.ServiceDueItem) {
     val localizer = rememberLocalizer()
     val level = item.status.level
     val forecast = item.due.forecast

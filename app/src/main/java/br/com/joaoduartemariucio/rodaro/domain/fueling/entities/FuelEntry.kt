@@ -14,6 +14,8 @@ data class FuelEntry(
     val liters: Double,
     val pricePerLiter: BigDecimal,
     val isFullTank: Boolean,
+    val fuelType: FuelType? = null,
+    val createdAt: Instant = date,
 ) : Chronological {
     val totalCost: BigDecimal get() = liters.toDecimal().multiply(pricePerLiter)
 }

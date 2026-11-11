@@ -2,23 +2,35 @@ package br.com.joaoduartemariucio.rodaro.viewmodels
 
 import br.com.joaoduartemariucio.rodaro.calculations.assertDecimal
 import br.com.joaoduartemariucio.rodaro.calculations.day
+import br.com.joaoduartemariucio.rodaro.calculations.dueItem
+import br.com.joaoduartemariucio.rodaro.calculations.expense
 import br.com.joaoduartemariucio.rodaro.domain.common.errors.AccountError
 import br.com.joaoduartemariucio.rodaro.domain.common.services.Account
+import br.com.joaoduartemariucio.rodaro.domain.costs.entities.ExpenseCategory
+import br.com.joaoduartemariucio.rodaro.domain.costs.entities.FineDetails
+import br.com.joaoduartemariucio.rodaro.domain.dues.entities.DueKind
 import br.com.joaoduartemariucio.rodaro.domain.fueling.entities.FuelEntry
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.entities.ServiceEntry
 import br.com.joaoduartemariucio.rodaro.domain.preferences.entities.Preferences
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.Vehicle
 import br.com.joaoduartemariucio.rodaro.fakes.FakeAccountService
+import br.com.joaoduartemariucio.rodaro.fakes.FakeReminderScheduler
+import br.com.joaoduartemariucio.rodaro.fakes.FixedDateProvider
+import br.com.joaoduartemariucio.rodaro.fakes.InMemoryDueItemRepository
+import br.com.joaoduartemariucio.rodaro.fakes.InMemoryExpenseRepository
 import br.com.joaoduartemariucio.rodaro.fakes.InMemoryFuelEntryRepository
 import br.com.joaoduartemariucio.rodaro.fakes.InMemoryPreferencesRepository
 import br.com.joaoduartemariucio.rodaro.fakes.InMemoryServiceRepository
 import br.com.joaoduartemariucio.rodaro.fakes.InMemoryVehicleRepository
+import br.com.joaoduartemariucio.rodaro.fakes.TestLocalizer
 import br.com.joaoduartemariucio.rodaro.presentation.profile.ProfileViewModel
 import br.com.joaoduartemariucio.rodaro.presentation.profile.ProfileViewModel.DeleteState
 import br.com.joaoduartemariucio.rodaro.presentation.profile.ProfileViewModel.NotificationsState
+import br.com.joaoduartemariucio.rodaro.presentation.reminders.ServiceReminderSync
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import java.math.BigDecimal
+import java.time.LocalDate
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
@@ -34,6 +46,8 @@ class ProfileViewModelTests {
     private val vehicles = InMemoryVehicleRepository()
     private val fuel = InMemoryFuelEntryRepository()
     private val services = InMemoryServiceRepository()
+    private val expenses = InMemoryExpenseRepository()
+    private val dues = InMemoryDueItemRepository()
     private val preferences = InMemoryPreferencesRepository()
 
     private fun makeViewModel(service: FakeAccountService = FakeAccountService()) =
@@ -42,6 +56,8 @@ class ProfileViewModelTests {
             vehicleRepository = vehicles,
             fuelEntryRepository = fuel,
             serviceRepository = services,
+            expenseRepository = expenses,
+            dueItemRepository = dues,
             preferencesRepository = preferences,
             clearLocalData = { cleared++ },
         )
@@ -232,6 +248,78 @@ class ProfileViewModelTests {
             assertEquals(1, summary?.vehicleCount)
             assertEquals(3, summary?.recordCount)
             assertDecimal("224.00", summary?.totalSpent)
+        }
+
+    @Test
+    fun `the garage total is cash spent, with paid fines, financing and accessories but not unpaid fines`() =
+        runTest {
+            val car = Vehicle(name = "Car", createdAt = day(0))
+            vehicles.save(car)
+            fuel.save(FuelEntry(vehicleId = car.id, date = day(2), odometer = 1_000.0, liters = 10.0, pricePerLiter = BigDecimal("5.00"), isFullTank = true))
+            expenses.save(expense(ExpenseCategory.MULTA, "100", dayOffset = 3, fine = FineDetails(), vehicleId = car.id))
+            expenses.save(expense(ExpenseCategory.MULTA, "300", dayOffset = 3, fine = FineDetails(isPaid = false), vehicleId = car.id))
+            expenses.save(expense(ExpenseCategory.FINANCIAMENTO, "500", dayOffset = 4, vehicleId = car.id))
+            expenses.save(expense(ExpenseCategory.ACESSORIOS, "80", dayOffset = 5, vehicleId = car.id))
+            val viewModel = makeViewModel()
+
+            viewModel.load()
+
+            assertEquals(5, viewModel.summary?.recordCount)
+            assertDecimal("730", viewModel.summary?.totalSpent)
+        }
+
+    @Test
+    fun `driver license items load and a change refreshes them and syncs the reminders`() =
+        runTest {
+            val scheduler = FakeReminderScheduler()
+            val sync =
+                ServiceReminderSync(
+                    vehicleRepository = vehicles,
+                    fuelEntryRepository = fuel,
+                    serviceRepository = services,
+                    dueItemRepository = dues,
+                    expenseRepository = expenses,
+                    scheduler = scheduler,
+                    dateProvider = FixedDateProvider(day(1)),
+                    localizer = TestLocalizer(),
+                    preferences = preferences,
+                )
+            val viewModel =
+                ProfileViewModel(
+                    accountService = FakeAccountService(),
+                    vehicleRepository = vehicles,
+                    fuelEntryRepository = fuel,
+                    serviceRepository = services,
+                    expenseRepository = expenses,
+                    dueItemRepository = dues,
+                    preferencesRepository = preferences,
+                    clearLocalData = {},
+                    reminders = sync,
+                )
+            val old = dueItem(DueKind.CNH, LocalDate.parse("2000-06-01"), vehicleId = null, paidAt = day(0))
+            dues.save(old)
+            viewModel.load()
+            assertEquals(listOf(old), viewModel.driverItems)
+            assertEquals(1, viewModel.summary?.recordCount)
+
+            val current = dueItem(DueKind.CNH, LocalDate.parse("2001-06-01"), vehicleId = null)
+            dues.save(current)
+            viewModel.driverItemsChanged()
+
+            assertEquals(listOf(current, old), viewModel.driverItems)
+            assertEquals(2, viewModel.summary?.recordCount)
+            assertEquals(6, scheduler.scheduled.size)
+        }
+
+    @Test
+    fun `driver items that cannot be read show as none`() =
+        runTest {
+            dues.failure = IllegalStateException("disk")
+            val viewModel = makeViewModel()
+
+            viewModel.load()
+
+            assertTrue(viewModel.driverItems.isEmpty())
         }
 
     @Test

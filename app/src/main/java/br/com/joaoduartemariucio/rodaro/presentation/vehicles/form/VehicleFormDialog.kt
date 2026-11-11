@@ -1,10 +1,16 @@
 package br.com.joaoduartemariucio.rodaro.presentation.vehicles.form
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircle
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -14,18 +20,24 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import br.com.joaoduartemariucio.rodaro.R
 import br.com.joaoduartemariucio.rodaro.app.LocalDependencies
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.entities.ServiceRule
+import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.Vehicle
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.VehicleKind
 import br.com.joaoduartemariucio.rodaro.presentation.common.FailureMessage
 import br.com.joaoduartemariucio.rodaro.presentation.common.FormDialog
@@ -101,6 +113,22 @@ fun VehicleFormDialog(
         }
 
         item {
+            SectionHeader(stringResource(R.string.fuel_capability))
+            val label = stringResource(R.string.fuel_capability)
+            val capabilities = viewModel.availableCapabilities
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp).semantics { contentDescription = label }) {
+                capabilities.forEachIndexed { index, capability ->
+                    SegmentedButton(
+                        selected = viewModel.fuelCapability == capability,
+                        onClick = { viewModel.fuelCapability = capability },
+                        shape = SegmentedButtonDefaults.itemShape(index, capabilities.size),
+                        label = { Text(stringResource(capability.label), maxLines = 1) },
+                    )
+                }
+            }
+        }
+
+        item {
             SectionHeader(stringResource(R.string.identification))
             SectionCard {
                 OutlinedTextField(
@@ -126,6 +154,15 @@ fun VehicleFormDialog(
                         ),
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp).keepsKeyboard(),
                 )
+                OutlinedTextField(
+                    value = viewModel.modelYear,
+                    onValueChange = { viewModel.modelYear = it },
+                    label = { Text(stringResource(R.string.vehicle_model_year)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp).keepsKeyboard(),
+                )
+                UfPicker(viewModel.uf) { viewModel.uf = it }
             }
         }
 
@@ -154,7 +191,13 @@ fun VehicleFormDialog(
             SectionHeader(stringResource(R.string.service_reminders))
             SectionCard {
                 viewModel.rules.forEachIndexed { index, rule ->
-                    ServiceRuleRow(rule, onRemove = { viewModel.removeRules(setOf(index)) })
+                    ServiceRuleRow(
+                        rule = rule,
+                        kinds = viewModel.ruleKinds(rule),
+                        hint = viewModel.manualHint(rule),
+                        onSelect = { viewModel.selectRuleKind(rule, it) },
+                        onRemove = { viewModel.removeRules(setOf(index)) },
+                    )
                     SectionDivider()
                 }
                 TextButton(onClick = viewModel::addRule) {
@@ -178,6 +221,35 @@ fun VehicleFormDialog(
 
         if (viewModel.issues.isNotEmpty()) {
             item { SectionCard(Modifier.padding(top = 16.dp)) { ValidationFooter(viewModel.issues) } }
+        }
+    }
+}
+
+@Composable
+private fun UfPicker(
+    uf: String?,
+    onSelect: (String?) -> Unit,
+) {
+    var isPicking by remember { mutableStateOf(false) }
+    Row(Modifier.fillMaxWidth().heightIn(min = 44.dp).padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(stringResource(R.string.vehicle_uf), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        Box {
+            TextButton(onClick = { isPicking = true }) {
+                Text(uf ?: stringResource(R.string.vehicle_uf_none))
+                Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
+            }
+            DropdownMenu(expanded = isPicking, onDismissRequest = { isPicking = false }) {
+                DropdownMenuItem(text = { Text(stringResource(R.string.vehicle_uf_none)) }, onClick = {
+                    onSelect(null)
+                    isPicking = false
+                })
+                for (code in Vehicle.UF_CODES) {
+                    DropdownMenuItem(text = { Text(code) }, onClick = {
+                        onSelect(code)
+                        isPicking = false
+                    })
+                }
+            }
         }
     }
 }

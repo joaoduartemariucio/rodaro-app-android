@@ -16,6 +16,7 @@ import br.com.joaoduartemariucio.rodaro.domain.maintenance.entities.ServiceKind
 import br.com.joaoduartemariucio.rodaro.domain.preferences.entities.Preferences
 import br.com.joaoduartemariucio.rodaro.domain.preferences.entities.UnitSystem
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.OdometerSample
+import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.VehicleKind
 import br.com.joaoduartemariucio.rodaro.fakes.FixedDateProvider
 import br.com.joaoduartemariucio.rodaro.fakes.InMemoryServiceRepository
 import br.com.joaoduartemariucio.rodaro.presentation.common.DisplayPreferences
@@ -43,7 +44,8 @@ class ServiceEntryFormViewModelTests {
         mode: ServiceEntryFormViewModel.Mode = ServiceEntryFormViewModel.Mode.Create(testVehicleId),
         repository: InMemoryServiceRepository = InMemoryServiceRepository(),
         otherReadings: List<OdometerSample> = emptyList(),
-    ) = ServiceEntryFormViewModel(mode, repository, FixedDateProvider(day(30)), otherReadings)
+        vehicleKind: VehicleKind = VehicleKind.CAR,
+    ) = ServiceEntryFormViewModel(mode, repository, FixedDateProvider(day(30)), otherReadings, vehicleKind = vehicleKind)
 
     @Test
     fun `a new form defaults to an oil change today and only needs the odometer`() {
@@ -156,4 +158,51 @@ class ServiceEntryFormViewModelTests {
 
         assertEquals(160.9344, viewModel.parsedOdometer!!, 0.001)
     }
+
+    @Test
+    fun `the grid only offers services that apply to the vehicle kind`() {
+        val car = makeViewModel()
+        val motorcycle = makeViewModel(vehicleKind = VehicleKind.MOTORCYCLE)
+
+        assertTrue(ServiceKind.TIMING_BELT in car.availableKinds)
+        assertFalse(ServiceKind.CHAIN in car.availableKinds)
+        assertTrue(ServiceKind.CHAIN_KIT in motorcycle.availableKinds)
+        assertFalse(ServiceKind.TIMING_BELT in motorcycle.availableKinds)
+        assertEquals(ServiceKind.OTHER, motorcycle.availableKinds.last())
+    }
+
+    @Test
+    fun `editing a service that no longer applies still offers its kind`() {
+        val entry = ServiceEntry(vehicleId = testVehicleId, kind = ServiceKind.CHAIN, date = day(10), odometer = 1_000.0, cost = BigDecimal.ZERO)
+
+        val viewModel = makeViewModel(ServiceEntryFormViewModel.Mode.Edit(entry), vehicleKind = VehicleKind.CAR)
+
+        assertTrue(ServiceKind.CHAIN in viewModel.availableKinds)
+        assertEquals(ServiceKind.OTHER, viewModel.availableKinds.last())
+        assertEquals(17, viewModel.availableKinds.size)
+    }
+
+    @Test
+    fun `the workshop is trimmed, empty becomes null and createdAt is now`() =
+        runTest {
+            val repository = InMemoryServiceRepository()
+            val viewModel = makeViewModel(repository = repository)
+            viewModel.odometer = NumberInput.text(1_000.0, NumberInput.Style.KILOMETERS)
+            viewModel.date = day(5)
+            viewModel.workshop = "  Oficina do Zé  "
+
+            viewModel.save()
+
+            val saved = repository.entries(testVehicleId).single()
+            assertEquals("Oficina do Zé", saved.workshop)
+            assertEquals(day(30), saved.createdAt)
+
+            val edit = makeViewModel(ServiceEntryFormViewModel.Mode.Edit(saved), repository)
+            assertEquals("Oficina do Zé", edit.workshop)
+            edit.workshop = "   "
+            edit.save()
+
+            assertNull(repository.entries(testVehicleId).single().workshop)
+            assertEquals(day(30), repository.entries(testVehicleId).single().createdAt)
+        }
 }

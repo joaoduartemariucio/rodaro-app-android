@@ -13,7 +13,9 @@ import br.com.joaoduartemariucio.rodaro.data.backup.services.ContentResolverDocu
 import br.com.joaoduartemariucio.rodaro.data.common.services.FirebaseAccountService
 import br.com.joaoduartemariucio.rodaro.data.common.services.FirebaseAnalyticsTracker
 import br.com.joaoduartemariucio.rodaro.data.common.services.SystemDateProvider
+import br.com.joaoduartemariucio.rodaro.data.costs.repositories.RoomExpenseRepository
 import br.com.joaoduartemariucio.rodaro.data.database.RodaroDatabase
+import br.com.joaoduartemariucio.rodaro.data.dues.repositories.RoomDueItemRepository
 import br.com.joaoduartemariucio.rodaro.data.fueling.repositories.RoomFuelEntryRepository
 import br.com.joaoduartemariucio.rodaro.data.maintenance.repositories.RoomServiceRepository
 import br.com.joaoduartemariucio.rodaro.data.network.OrsNetwork
@@ -30,6 +32,8 @@ import br.com.joaoduartemariucio.rodaro.domain.backup.services.DocumentStore
 import br.com.joaoduartemariucio.rodaro.domain.common.services.AccountService
 import br.com.joaoduartemariucio.rodaro.domain.common.services.Analytics
 import br.com.joaoduartemariucio.rodaro.domain.common.services.DateProvider
+import br.com.joaoduartemariucio.rodaro.domain.costs.repositories.ExpenseRepository
+import br.com.joaoduartemariucio.rodaro.domain.dues.repositories.DueItemRepository
 import br.com.joaoduartemariucio.rodaro.domain.fueling.repositories.FuelEntryRepository
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.repositories.ServiceRepository
 import br.com.joaoduartemariucio.rodaro.domain.preferences.entities.Preferences
@@ -56,6 +60,8 @@ class AppDependencies(
     val fuelEntryRepository: FuelEntryRepository = RoomFuelEntryRepository(database.fuelEntries(), database.vehicles())
     val serviceRepository: ServiceRepository = RoomServiceRepository(database.services(), database.vehicles())
     val routeRepository: RouteRepository = RoomRouteRepository(database.tripRoutes())
+    val expenseRepository: ExpenseRepository = RoomExpenseRepository(database.expenses(), database.vehicles())
+    val dueItemRepository: DueItemRepository = RoomDueItemRepository(database.dueItems(), database.vehicles())
     val backupRepository: BackupRepository = RoomBackupRepository(database.backup())
     val backupCodec: BackupCodec = JsonBackupCodec(BuildConfig.VERSION_NAME)
     val documentStore: DocumentStore = ContentResolverDocumentStore(context.contentResolver, JsonBackupCodec.MAX_CHARACTERS)
@@ -90,6 +96,8 @@ class AppDependencies(
             vehicleRepository = vehicleRepository,
             fuelEntryRepository = fuelEntryRepository,
             serviceRepository = serviceRepository,
+            dueItemRepository = dueItemRepository,
+            expenseRepository = expenseRepository,
             scheduler = reminderScheduler,
             dateProvider = dateProvider,
             localizer = ResourcesLocalizer(context.resources),

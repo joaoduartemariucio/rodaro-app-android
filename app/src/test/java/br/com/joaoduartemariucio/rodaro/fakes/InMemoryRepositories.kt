@@ -4,6 +4,10 @@ import br.com.joaoduartemariucio.rodaro.domain.common.entities.sortedChronologic
 import br.com.joaoduartemariucio.rodaro.domain.common.errors.RepositoryError
 import br.com.joaoduartemariucio.rodaro.domain.common.services.Analytics
 import br.com.joaoduartemariucio.rodaro.domain.common.services.DateProvider
+import br.com.joaoduartemariucio.rodaro.domain.costs.entities.Expense
+import br.com.joaoduartemariucio.rodaro.domain.costs.repositories.ExpenseRepository
+import br.com.joaoduartemariucio.rodaro.domain.dues.entities.DueItem
+import br.com.joaoduartemariucio.rodaro.domain.dues.repositories.DueItemRepository
 import br.com.joaoduartemariucio.rodaro.domain.fueling.entities.FuelEntry
 import br.com.joaoduartemariucio.rodaro.domain.fueling.repositories.FuelEntryRepository
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.entities.ServiceEntry
@@ -120,6 +124,60 @@ class InMemoryServiceRepository(
     override suspend fun deleteRule(id: UUID) {
         failure?.let { throw it }
         ruleStorage.remove(id) ?: throw RepositoryError.EntryNotFound(id)
+    }
+}
+
+class InMemoryExpenseRepository(
+    expenses: List<Expense> = emptyList(),
+    var failure: Exception? = null,
+) : ExpenseRepository {
+    private val storage = expenses.associateBy { it.id }.toMutableMap()
+
+    override suspend fun expenses(vehicleId: UUID): List<Expense> {
+        failure?.let { throw it }
+        return storage.values.filter { it.vehicleId == vehicleId }.sortedBy { it.date }
+    }
+
+    override suspend fun save(expense: Expense) {
+        failure?.let { throw it }
+        storage[expense.id] = expense
+    }
+
+    override suspend fun delete(id: UUID) {
+        failure?.let { throw it }
+        storage.remove(id) ?: throw RepositoryError.EntryNotFound(id)
+    }
+}
+
+class InMemoryDueItemRepository(
+    items: List<DueItem> = emptyList(),
+    var failure: Exception? = null,
+) : DueItemRepository {
+    private val storage = items.associateBy { it.id }.toMutableMap()
+
+    override suspend fun items(vehicleId: UUID): List<DueItem> {
+        failure?.let { throw it }
+        return storage.values.filter { it.vehicleId == vehicleId }.sortedBy { it.dueDate }
+    }
+
+    override suspend fun driverItems(): List<DueItem> {
+        failure?.let { throw it }
+        return storage.values.filter { it.vehicleId == null }.sortedBy { it.dueDate }
+    }
+
+    override suspend fun all(): List<DueItem> {
+        failure?.let { throw it }
+        return storage.values.sortedWith(compareBy({ it.dueDate }, { it.id }))
+    }
+
+    override suspend fun save(item: DueItem) {
+        failure?.let { throw it }
+        storage[item.id] = item
+    }
+
+    override suspend fun delete(id: UUID) {
+        failure?.let { throw it }
+        storage.remove(id) ?: throw RepositoryError.EntryNotFound(id)
     }
 }
 

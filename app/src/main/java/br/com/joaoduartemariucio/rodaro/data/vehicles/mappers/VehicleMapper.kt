@@ -14,6 +14,9 @@ object VehicleMapper {
             tankCapacity = model.tankCapacity,
             createdAt = model.createdAt,
             isArchived = model.isArchived,
+            fuelCapability = model.fuelCapability,
+            uf = model.uf,
+            modelYear = model.modelYear,
         )
 
     fun model(entity: Vehicle): VehicleModel =
@@ -26,5 +29,8 @@ object VehicleMapper {
             tankCapacity = entity.tankCapacity,
             createdAt = entity.createdAt,
             isArchived = entity.isArchived,
+            fuelCapability = entity.fuelCapability,
+            uf = entity.uf,
+            modelYear = entity.modelYear,
         )
 }

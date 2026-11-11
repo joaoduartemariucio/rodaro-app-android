@@ -85,6 +85,7 @@ fun VehicleListScreen(
                 vehicleRepository = dependencies.vehicleRepository,
                 fuelEntryRepository = dependencies.fuelEntryRepository,
                 serviceRepository = dependencies.serviceRepository,
+                expenseRepository = dependencies.expenseRepository,
                 dateProvider = dependencies.dateProvider,
                 reminders = dependencies.reminderSync,
                 analytics = dependencies.analytics,

@@ -108,7 +108,7 @@ fun SpendingChart(
 
     Canvas(modifier.fillMaxWidth().height(height).semantics { contentDescription = description }) {
         if (months.isEmpty()) return@Canvas
-        val ticks = niceTicks(0.0, months.maxOf { it.total.toDouble() }, includeZero = true)
+        val ticks = niceTicks(0.0, months.maxOf { maxOf(0.0, it.total.toDouble()) }, includeZero = true)
         val plot = Size(size.width - axisWidth.toPx(), size.height - labelHeight.toPx())
 
         drawGrid(ticks, plot, measurer, labelStyle, gridColor) { Formats.number(it, 0) }
@@ -120,9 +120,14 @@ fun SpendingChart(
             val left = index * slot + (slot - barWidth) / 2
             val fuel = scale(month.fuel.toDouble())
             val service = scale(month.service.toDouble())
+            val expenses = scale(month.expenses.toDouble())
             val radius = CornerRadius(3.dp.toPx())
             if (fuel > 0) drawRoundRect(Palette.fuel, Offset(left, plot.height - fuel), Size(barWidth, fuel), radius)
             if (service > 0) drawRoundRect(Palette.service, Offset(left, plot.height - fuel - service), Size(barWidth, service), radius)
+            if (expenses > 0) {
+                val below = maxOf(0f, fuel) + maxOf(0f, service)
+                drawRoundRect(Palette.expense, Offset(left, plot.height - below - expenses), Size(barWidth, expenses), radius)
+            }
 
             val layout = measurer.measure(month.month.formattedShortMonth(), labelStyle)
             drawText(layout, topLeft = Offset(index * slot + (slot - layout.size.width) / 2, plot.height + 4.dp.toPx()))

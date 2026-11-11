@@ -20,7 +20,7 @@ object BackupSpreadsheet {
         val vehicleName: String,
         val vehicleId: UUID,
         val date: Instant,
-        val odometer: Double,
+        val odometer: Double?,
         val cells: List<String>,
     )
 
@@ -59,6 +59,9 @@ object BackupSpreadsheet {
                         "",
                         number(entry.totalCost.setScale(2, RoundingMode.HALF_EVEN)),
                         "",
+                        entry.fuelType?.let { localizer.string(it.label) }.orEmpty(),
+                        "",
+                        "",
                     ),
                 )
             }
@@ -82,6 +85,35 @@ object BackupSpreadsheet {
                         localizer.string(entry.kind.label),
                         number(entry.cost),
                         userText(entry.notes),
+                        "",
+                        userText(entry.workshop.orEmpty()),
+                        "",
+                    ),
+                )
+            }
+        val expenseRows =
+            snapshot.expenses.filter { it.isPaid }.mapNotNull { expense ->
+                val vehicle = vehicles[expense.vehicleId] ?: return@mapNotNull null
+                Row(
+                    vehicle.name,
+                    vehicle.id,
+                    expense.date,
+                    expense.odometer,
+                    listOf(
+                        userText(vehicle.name),
+                        userText(vehicle.plate.orEmpty()),
+                        localizer.string(R.string.csv_expense_row),
+                        day(expense.date),
+                        expense.odometer?.let(::number).orEmpty(),
+                        "",
+                        "",
+                        "",
+                        "",
+                        number(expense.amount),
+                        userText(expense.note),
+                        "",
+                        "",
+                        localizer.string(expense.category.label),
                     ),
                 )
             }
@@ -98,10 +130,13 @@ object BackupSpreadsheet {
                 R.string.csv_service,
                 R.string.csv_total_cost,
                 R.string.csv_notes,
+                R.string.csv_fuel_type,
+                R.string.csv_workshop,
+                R.string.csv_category,
             ).map(localizer::string)
         val rows =
-            (fuelRows + serviceRows)
-                .sortedWith(compareBy<Row>({ it.vehicleName }, { it.vehicleId }, { it.date }, { it.odometer }))
+            (fuelRows + serviceRows + expenseRows)
+                .sortedWith(compareBy<Row>({ it.vehicleName }, { it.vehicleId }, { it.date }, { it.odometer ?: 0.0 }))
                 .map { it.cells }
         return BOM +
             (listOf(header) + rows).joinToString("") { cells ->

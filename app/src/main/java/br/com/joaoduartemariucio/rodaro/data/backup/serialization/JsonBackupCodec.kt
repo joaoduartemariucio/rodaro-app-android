@@ -5,7 +5,15 @@ import br.com.joaoduartemariucio.rodaro.domain.backup.entities.BackupSnapshot
 import br.com.joaoduartemariucio.rodaro.domain.backup.entities.PortablePreferences
 import br.com.joaoduartemariucio.rodaro.domain.backup.errors.BackupError
 import br.com.joaoduartemariucio.rodaro.domain.backup.services.BackupCodec
+import br.com.joaoduartemariucio.rodaro.domain.costs.entities.Expense
+import br.com.joaoduartemariucio.rodaro.domain.costs.entities.ExpenseCategory
+import br.com.joaoduartemariucio.rodaro.domain.costs.entities.FineDetails
+import br.com.joaoduartemariucio.rodaro.domain.costs.entities.FineDiscount
+import br.com.joaoduartemariucio.rodaro.domain.costs.entities.FineSeverity
+import br.com.joaoduartemariucio.rodaro.domain.dues.entities.DueItem
+import br.com.joaoduartemariucio.rodaro.domain.dues.entities.DueKind
 import br.com.joaoduartemariucio.rodaro.domain.fueling.entities.FuelEntry
+import br.com.joaoduartemariucio.rodaro.domain.fueling.entities.FuelType
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.entities.ServiceEntry
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.entities.ServiceKind
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.entities.ServiceRule
@@ -13,6 +21,7 @@ import br.com.joaoduartemariucio.rodaro.domain.preferences.entities.CurrencyOpti
 import br.com.joaoduartemariucio.rodaro.domain.preferences.entities.LanguageOption
 import br.com.joaoduartemariucio.rodaro.domain.preferences.entities.UnitSystem
 import br.com.joaoduartemariucio.rodaro.domain.trips.entities.SavedRoute
+import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.FuelCapability
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.Vehicle
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.VehicleKind
 import kotlinx.coroutines.Dispatchers
@@ -26,6 +35,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import java.math.BigDecimal
 import java.time.DateTimeException
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -55,7 +65,7 @@ class JsonBackupCodec(
                 val version = root["formatVersion"]?.jsonPrimitive?.intOrNull ?: throw BackupError.Unreadable()
                 if (version > FORMAT_VERSION) throw BackupError.NewerFormat(version, FORMAT_VERSION)
                 when (version) {
-                    1 -> version1(root)
+                    1, 2 -> decode(root)
                     else -> throw BackupError.Unreadable()
                 }
             } catch (error: IllegalArgumentException) {
@@ -67,7 +77,7 @@ class JsonBackupCodec(
             }
         }
 
-    private fun version1(root: JsonObject): BackupSnapshot {
+    private fun decode(root: JsonObject): BackupSnapshot {
         val file = json.decodeFromJsonElement(BackupFileDto.serializer(), root)
         return BackupSnapshot(
             vehicles = file.vehicles.map(::vehicle),
@@ -75,6 +85,8 @@ class JsonBackupCodec(
             serviceEntries = file.serviceEntries.map(::serviceEntry),
             serviceRules = file.serviceRules.map(::serviceRule),
             savedRoutes = file.savedRoutes.map(::savedRoute),
+            expenses = file.expenses.map(::expense),
+            dueItems = file.dueItems.mapNotNull(::dueItem),
             preferences = file.preferences?.let(::preferences),
             exportedAt = file.exportedAt?.let(Instant::parse),
         )
@@ -91,6 +103,8 @@ class JsonBackupCodec(
             serviceEntries = snapshot.serviceEntries.map(::serviceEntryDto),
             serviceRules = snapshot.serviceRules.map(::serviceRuleDto),
             savedRoutes = snapshot.savedRoutes.map(::savedRouteDto),
+            expenses = snapshot.expenses.map(::expenseDto),
+            dueItems = snapshot.dueItems.map(::dueItemDto),
             preferences = snapshot.preferences?.let(::preferencesDto),
         )
 
@@ -104,6 +118,9 @@ class JsonBackupCodec(
             tankCapacityLiters = vehicle.tankCapacity,
             createdAt = instantText(vehicle.createdAt),
             isArchived = vehicle.isArchived,
+            fuelCapability = vehicle.fuelCapability.rawValue,
+            uf = vehicle.uf,
+            modelYear = vehicle.modelYear,
         )
 
     private fun vehicle(dto: VehicleDto) =
@@ -116,6 +133,9 @@ class JsonBackupCodec(
             tankCapacity = dto.tankCapacityLiters,
             createdAt = Instant.parse(dto.createdAt),
             isArchived = dto.isArchived,
+            fuelCapability = FuelCapability.of(dto.fuelCapability),
+            uf = dto.uf,
+            modelYear = dto.modelYear,
         )
 
     private fun fuelEntryDto(entry: FuelEntry) =
@@ -127,18 +147,24 @@ class JsonBackupCodec(
             liters = entry.liters,
             pricePerLiter = entry.pricePerLiter.toPlainString(),
             isFullTank = entry.isFullTank,
+            fuelType = entry.fuelType?.rawValue,
+            createdAt = instantText(entry.createdAt),
         )
 
-    private fun fuelEntry(dto: FuelEntryDto) =
-        FuelEntry(
+    private fun fuelEntry(dto: FuelEntryDto): FuelEntry {
+        val date = Instant.parse(dto.date)
+        return FuelEntry(
             id = UUID.fromString(dto.id),
             vehicleId = UUID.fromString(dto.vehicleId),
-            date = Instant.parse(dto.date),
+            date = date,
             odometer = dto.odometerKm,
             liters = dto.liters,
             pricePerLiter = BigDecimal(dto.pricePerLiter),
             isFullTank = dto.isFullTank,
+            fuelType = FuelType.of(dto.fuelType),
+            createdAt = dto.createdAt?.let(Instant::parse) ?: date,
         )
+    }
 
     private fun serviceEntryDto(entry: ServiceEntry) =
         ServiceEntryDto(
@@ -149,18 +175,107 @@ class JsonBackupCodec(
             odometerKm = entry.odometer,
             cost = entry.cost.toPlainString(),
             notes = entry.notes,
+            workshop = entry.workshop,
+            createdAt = instantText(entry.createdAt),
         )
 
-    private fun serviceEntry(dto: ServiceEntryDto) =
-        ServiceEntry(
+    private fun serviceEntry(dto: ServiceEntryDto): ServiceEntry {
+        val date = Instant.parse(dto.date)
+        return ServiceEntry(
             id = UUID.fromString(dto.id),
             vehicleId = UUID.fromString(dto.vehicleId),
             kind = serviceKind(dto.kind),
-            date = Instant.parse(dto.date),
+            date = date,
             odometer = dto.odometerKm,
             cost = BigDecimal(dto.cost),
             notes = dto.notes,
+            workshop = dto.workshop,
+            createdAt = dto.createdAt?.let(Instant::parse) ?: date,
         )
+    }
+
+    private fun expenseDto(expense: Expense) =
+        ExpenseDto(
+            id = expense.id.toString(),
+            vehicleId = expense.vehicleId.toString(),
+            category = expense.category.rawValue,
+            date = instantText(expense.date),
+            amount = expense.amount.toPlainString(),
+            odometerKm = expense.odometer,
+            note = expense.note,
+            coverageStart = expense.coverageStart?.toString(),
+            coverageEnd = expense.coverageEnd?.toString(),
+            fine =
+                expense.fine?.takeIf { expense.category == ExpenseCategory.MULTA }?.let { fine ->
+                    FineDto(
+                        infractionDate = fine.infractionDate?.toString(),
+                        severity = fine.severity?.rawValue,
+                        points = fine.points,
+                        dueDate = fine.dueDate?.toString(),
+                        discount = fine.discount.rawValue,
+                        isPaid = fine.isPaid,
+                    )
+                },
+            createdAt = instantText(expense.createdAt),
+        )
+
+    private fun expense(dto: ExpenseDto): Expense {
+        val date = Instant.parse(dto.date)
+        val category = ExpenseCategory.of(dto.category)
+        return Expense(
+            id = UUID.fromString(dto.id),
+            vehicleId = UUID.fromString(dto.vehicleId),
+            category = category,
+            date = date,
+            amount = BigDecimal(dto.amount),
+            odometer = dto.odometerKm,
+            note = dto.note,
+            coverageStart = dto.coverageStart?.let(LocalDate::parse),
+            coverageEnd = dto.coverageEnd?.let(LocalDate::parse),
+            fine =
+                dto.fine?.takeIf { category == ExpenseCategory.MULTA }?.let { fine ->
+                    FineDetails(
+                        infractionDate = fine.infractionDate?.let(LocalDate::parse),
+                        severity = FineSeverity.of(fine.severity),
+                        points = fine.points,
+                        dueDate = fine.dueDate?.let(LocalDate::parse),
+                        discount = FineDiscount.of(fine.discount),
+                        isPaid = fine.isPaid,
+                    )
+                },
+            createdAt = dto.createdAt?.let(Instant::parse) ?: date,
+        )
+    }
+
+    private fun dueItemDto(item: DueItem) =
+        DueItemDto(
+            id = item.id.toString(),
+            vehicleId = item.vehicleId?.toString(),
+            kind = item.kind.rawValue,
+            dueDate = item.dueDate.toString(),
+            amount = item.amount?.toPlainString(),
+            paidAt = item.paidAt?.let(::instantText),
+            installmentNumber = item.installmentNumber,
+            installmentCount = item.installmentCount,
+            note = item.note,
+            createdAt = instantText(item.createdAt),
+        )
+
+    private fun dueItem(dto: DueItemDto): DueItem? {
+        val kind = DueKind.of(dto.kind) ?: return null
+        return DueItem(
+            id = UUID.fromString(dto.id),
+            vehicleId = dto.vehicleId?.let(UUID::fromString),
+            kind = kind,
+            dueDate = LocalDate.parse(dto.dueDate),
+            amount = dto.amount?.let(::BigDecimal),
+            paidAt = dto.paidAt?.let(Instant::parse),
+            installmentNumber = dto.installmentNumber,
+            installmentCount = dto.installmentCount,
+            note = dto.note,
+            createdAt = Instant.parse(dto.createdAt),
+        )
+    }
 
     private fun serviceRuleDto(rule: ServiceRule) =
         ServiceRuleDto(
@@ -249,7 +364,7 @@ class JsonBackupCodec(
 
     companion object {
         const val FORMAT = "rodaro.backup"
-        const val FORMAT_VERSION = 1
+        const val FORMAT_VERSION = 2
         const val MAX_CHARACTERS = 32 * 1024 * 1024
         private const val PLATFORM = "android"
         private const val SYSTEM_LANGUAGE = "system"

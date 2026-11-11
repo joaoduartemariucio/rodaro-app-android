@@ -6,8 +6,11 @@ import br.com.joaoduartemariucio.rodaro.data.backup.serialization.JsonBackupCode
 import br.com.joaoduartemariucio.rodaro.domain.backup.entities.BackupSnapshot
 import br.com.joaoduartemariucio.rodaro.domain.backup.entities.PortablePreferences
 import br.com.joaoduartemariucio.rodaro.domain.backup.errors.BackupError
+import br.com.joaoduartemariucio.rodaro.domain.costs.entities.ExpenseCategory
+import br.com.joaoduartemariucio.rodaro.domain.fueling.entities.FuelType
 import br.com.joaoduartemariucio.rodaro.domain.maintenance.entities.ServiceKind
 import br.com.joaoduartemariucio.rodaro.domain.preferences.entities.LanguageOption
+import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.FuelCapability
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.VehicleKind
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
@@ -49,6 +52,25 @@ class JsonBackupCodecTests {
             assertDecimal("5.899", decoded.fuelEntries.single().pricePerLiter)
             assertDecimal("120.00", decoded.serviceEntries.single().cost)
             assertDecimal("18.40", decoded.savedRoutes.single().tollCost)
+        }
+
+    @Test
+    fun `every service kind round trips through its raw value`() =
+        runTest {
+            val base = BackupFixtures.snapshot()
+            for (kind in ServiceKind.entries) {
+                val snapshot = base.copy(serviceEntries = base.serviceEntries.map { it.copy(kind = kind) })
+
+                assertEquals(
+                    kind,
+                    codec
+                        .decode(codec.encode(snapshot))
+                        .serviceEntries
+                        .single()
+                        .kind,
+                )
+            }
+            assertEquals("timingBelt", encoded(base.copy(serviceEntries = base.serviceEntries.map { it.copy(kind = ServiceKind.TIMING_BELT) })).first("serviceEntries").text("kind"))
         }
 
     @Test
@@ -99,7 +121,7 @@ class JsonBackupCodecTests {
             val root = encoded()
 
             assertEquals(JsonBackupCodec.FORMAT, root.text("format"))
-            assertEquals("1", root.text("formatVersion"))
+            assertEquals("2", root.text("formatVersion"))
             assertEquals("android", root.getValue("app").jsonObject.text("platform"))
             assertEquals("9.9.9", root.getValue("app").jsonObject.text("version"))
         }
@@ -119,10 +141,10 @@ class JsonBackupCodecTests {
     @Test
     fun `a file from a newer format version is refused with the versions involved`() =
         runTest {
-            val error = assertFailsWith<BackupError.NewerFormat> { codec.decode("""{"format":"rodaro.backup","formatVersion":2}""") }
+            val error = assertFailsWith<BackupError.NewerFormat> { codec.decode("""{"format":"rodaro.backup","formatVersion":3}""") }
 
-            assertEquals(2, error.found)
-            assertEquals(1, error.supported)
+            assertEquals(3, error.found)
+            assertEquals(2, error.supported)
         }
 
     @Test
@@ -229,5 +251,98 @@ class JsonBackupCodecTests {
             assertEquals(expected.savedRoutes.single().path, decoded.savedRoutes.single().path)
             assertDecimal("5.899", decoded.fuelEntries.single().pricePerLiter)
             assertDecimal("120.00", decoded.serviceEntries.single().cost)
+        }
+
+    @Test
+    fun `every phase A field round trips`() =
+        runTest {
+            val original = BackupFixtures.fullSnapshot()
+
+            val decoded = codec.decode(codec.encode(original))
+
+            assertEquals(original, decoded)
+            assertDecimal("2450.37", decoded.expenses.first().amount)
+            assertEquals(2, decoded.contents.expenses)
+            assertEquals(2, decoded.contents.dueItems)
+        }
+
+    @Test
+    fun `new fields are written with raw values and local dates`() =
+        runTest {
+            val root = encoded(BackupFixtures.fullSnapshot())
+
+            assertEquals("flex", root.first("vehicles").text("fuelCapability"))
+            assertEquals("SP", root.first("vehicles").text("uf"))
+            assertEquals("etanol", root.first("fuelEntries").text("fuelType"))
+            assertEquals("insurance", root.first("expenses").text("category"))
+            assertEquals("2025-03-10", root.first("expenses").text("coverageStart"))
+            assertEquals("ipva", root.first("dueItems").text("kind"))
+            assertEquals("2025-03-15", root.first("dueItems").text("dueDate"))
+            assertEquals(
+                "serious",
+                root
+                    .getValue("expenses")
+                    .jsonArray[1]
+                    .jsonObject
+                    .getValue("fine")
+                    .jsonObject
+                    .text("severity"),
+            )
+        }
+
+    @Test
+    fun `a version 1 file has flex vehicles, unknown fuel types, createdAt equal to the date and no expenses`() =
+        runTest {
+            val decoded = codec.decode(requireNotNull(javaClass.getResource("/backup/v1.json")).readText())
+
+            assertTrue(decoded.vehicles.all { it.fuelCapability == FuelCapability.FLEX && it.uf == null && it.modelYear == null })
+            assertNull(decoded.fuelEntries.single().fuelType)
+            assertEquals(decoded.fuelEntries.single().date, decoded.fuelEntries.single().createdAt)
+            assertEquals(decoded.serviceEntries.single().date, decoded.serviceEntries.single().createdAt)
+            assertNull(decoded.serviceEntries.single().workshop)
+            assertTrue(decoded.expenses.isEmpty())
+            assertTrue(decoded.dueItems.isEmpty())
+        }
+
+    @Test
+    fun `the version 2 golden file still decodes`() =
+        runTest {
+            val text = requireNotNull(javaClass.getResource("/backup/v2.json")).readText()
+
+            assertEquals(BackupFixtures.fullSnapshot(), codec.decode(text))
+        }
+
+    @Test
+    fun `unknown fuel types stay unknown, unknown categories become other and unknown due kinds are dropped`() =
+        runTest {
+            val vehicle = "11111111-1111-4111-8111-111111111111"
+            val text =
+                """
+                {"format":"rodaro.backup","formatVersion":2,
+                 "fuelEntries":[{"id":"33333333-3333-4333-8333-333333333333","vehicleId":"$vehicle","date":"2025-01-02T00:00:00Z",
+                   "odometerKm":10.0,"liters":1.0,"pricePerLiter":"5","isFullTank":true,"fuelType":"gnv"}],
+                 "expenses":[{"id":"77777777-7777-4777-8777-777777777777","vehicleId":"$vehicle","category":"lunch",
+                   "date":"2025-01-03T00:00:00Z","amount":"-12.50","fine":{"severity":"light"}}],
+                 "dueItems":[{"id":"99999999-9999-4999-8999-999999999999","kind":"tax","dueDate":"2025-03-01","createdAt":"2025-01-01T00:00:00Z"},
+                   {"id":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","kind":"driverLicense","dueDate":"2027-03-01","createdAt":"2025-01-01T00:00:00Z"}]}
+                """.trimIndent()
+
+            val decoded = codec.decode(text)
+
+            assertNull(decoded.fuelEntries.single().fuelType)
+            assertEquals(Instant.parse("2025-01-02T00:00:00Z"), decoded.fuelEntries.single().createdAt)
+            assertEquals(ExpenseCategory.OUTROS, decoded.expenses.single().category)
+            assertNull(decoded.expenses.single().fine)
+            assertDecimal("-12.50", decoded.expenses.single().amount)
+            assertNull(decoded.dueItems.single().vehicleId)
+            assertEquals(FuelType.of("gnv"), decoded.fuelEntries.single().fuelType)
+        }
+
+    @Test
+    fun `a broken local date is unreadable`() =
+        runTest {
+            val items = """[{"id":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","kind":"driverLicense","dueDate":"next year","createdAt":"2025-01-01T00:00:00Z"}]"""
+
+            assertFailsWith<BackupError.Unreadable> { codec.decode(replacing("dueItems", items)) }
         }
 }
