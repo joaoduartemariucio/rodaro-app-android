@@ -19,6 +19,7 @@ import br.com.joaoduartemariucio.rodaro.fakes.InMemoryFuelEntryRepository
 import br.com.joaoduartemariucio.rodaro.fakes.InMemoryServiceRepository
 import br.com.joaoduartemariucio.rodaro.fakes.InMemoryVehicleRepository
 import br.com.joaoduartemariucio.rodaro.presentation.common.DisplayPreferences
+import br.com.joaoduartemariucio.rodaro.presentation.common.Formats
 import br.com.joaoduartemariucio.rodaro.presentation.common.UnitConversion
 import br.com.joaoduartemariucio.rodaro.presentation.common.formattedShortMonthAndYear
 import br.com.joaoduartemariucio.rodaro.presentation.vehicles.detail.RefreshBackoff
@@ -301,14 +302,13 @@ class VehicleValuationTests {
 
     @Test
     fun `FIPE values show only in reais`() {
+        DisplayPreferences.update(Preferences(currency = CurrencyOption.BRL))
         assertTrue(UnitConversion.usesBrazilianReal)
         DisplayPreferences.update(Preferences(currency = CurrencyOption.EUR))
         assertFalse(UnitConversion.usesBrazilianReal)
         DisplayPreferences.update(Preferences(currency = null))
         assertEquals(
-            java.util.Currency
-                .getInstance(java.util.Locale.getDefault())
-                .currencyCode == "BRL",
+            Formats.currencyFor(java.util.Locale.getDefault()).currencyCode == "BRL",
             UnitConversion.usesBrazilianReal,
         )
     }
