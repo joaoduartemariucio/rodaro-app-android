@@ -7,6 +7,7 @@ class RodaroApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        ForegroundActivity.register(this)
         FirebaseSetup.start(this)
     }
 }

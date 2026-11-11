@@ -2,6 +2,7 @@ package br.com.joaoduartemariucio.rodaro.data.common.services
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.util.Log
 import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
@@ -24,6 +25,7 @@ import kotlin.coroutines.cancellation.CancellationException
 
 class FirebaseAccountService(
     private val context: Context,
+    private val activity: () -> Context?,
 ) : AccountService {
     private val auth: FirebaseAuth
         get() = FirebaseAuth.getInstance()
@@ -79,14 +81,16 @@ class FirebaseAccountService(
                 .setAutoSelectEnabled(false)
                 .build()
         val request = GetCredentialRequest.Builder().addCredentialOption(option).build()
+        val host = activity() ?: throw AccountError.Failed(IllegalStateException("no foreground activity"))
         val result =
             try {
-                credentialManager.getCredential(context, request)
+                credentialManager.getCredential(host, request)
             } catch (error: GetCredentialCancellationException) {
                 throw AccountError.Cancelled
             } catch (error: NoCredentialException) {
                 throw AccountError.NoGoogleAccount
             } catch (error: GetCredentialException) {
+                Log.w(TAG, "Google credential request failed", error)
                 throw AccountError.Failed(error)
             }
         val credential = result.credential
@@ -129,5 +133,6 @@ class FirebaseAccountService(
 
     private companion object {
         const val WEB_CLIENT_ID = "default_web_client_id"
+        const val TAG = "Rodaro.Account"
     }
 }

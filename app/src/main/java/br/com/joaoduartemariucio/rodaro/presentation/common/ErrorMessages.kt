@@ -27,6 +27,6 @@ fun Throwable.message(localizer: Localizer): String =
         is BackupError.Invalid -> localizer.string(R.string.error_backup_invalid)
         is BackupError.TooLarge -> localizer.string(R.string.error_backup_too_large)
         is BackupError.Storage -> localizer.string(R.string.error_backup_storage)
-        is AccountError.Failed -> localizedMessage ?: localizer.string(R.string.error_account_failed)
+        is AccountError.Failed -> localizer.string(R.string.error_account_failed)
         else -> localizedMessage ?: localizer.string(R.string.error_persistence_failed)
     }

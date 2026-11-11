@@ -117,7 +117,7 @@ class ValidationIssueTests {
         assertEquals("No Google account found on this device.", AccountError.NoGoogleAccount.message(localizer))
         assertEquals("Could not complete the request.", AccountError.Cancelled.message(localizer))
         assertEquals("You are not signed in.", AccountError.NotSignedIn.message(localizer))
-        assertEquals("java.lang.Exception: reason", AccountError.Failed(Exception("reason")).message(localizer))
-        assertEquals("java.lang.IllegalStateException", AccountError.Failed(IllegalStateException()).message(localizer))
+        assertEquals("Could not complete the request.", AccountError.Failed(Exception("reason")).message(localizer))
+        assertEquals("Could not complete the request.", AccountError.Failed(IllegalStateException()).message(localizer))
     }
 }

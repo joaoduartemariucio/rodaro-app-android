@@ -53,6 +53,14 @@ The account is **optional**: every screen works without one, and sign-in lives i
   generates when `google-services.json` holds a type-3 oauth client (Firebase console →
   Authentication → sign-in method → Google). Until then `signInWithGoogle` throws
   `AccountError.GoogleNotConfigured` and the screen explains it instead of crashing.
+- **Credential Manager needs an Activity:** `getCredential` launches the account picker, which
+  fails with `GetCredentialUnknownException` ("Failed to launch the selector UI") when given the
+  Application context — and `AppDependencies` only has that one. `app/ForegroundActivity` tracks
+  the resumed Activity through `ActivityLifecycleCallbacks` (weak reference) and
+  `FirebaseAccountService` receives it as a `() -> Context?`, so neither the Domain
+  `AccountService` nor the ViewModels need to know about Activities.
+- **`AccountError.Failed` shows a generic message:** the raw exception text leaked SDK class
+  names to users; the cause is logged under `Rodaro.Account` instead.
 - **Errors** are mapped from Firebase codes in `data/common/services/AuthErrors.kt`
   (`accountError`, accepting codes with and without the `ERROR_` prefix) so the mapping stays plain
   Kotlin with unit tests; the SDK glue itself is coverage-ignored.

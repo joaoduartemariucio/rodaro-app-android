@@ -66,7 +66,7 @@ class AppDependencies(
             OpenRouteServiceProvider(OrsNetwork.api(BuildConfig.ORS_API_KEY, log = DebugLog.http))
         }
     val dateProvider: DateProvider = SystemDateProvider()
-    val accountService: AccountService = FirebaseAccountService(context)
+    val accountService: AccountService = FirebaseAccountService(context) { ForegroundActivity.current }
     val preferencesRepository: PreferencesRepository = SharedPreferencesPreferencesRepository(context)
     val localeLanguageApplier = LocaleLanguageApplier(context)
     val clearLocalData: suspend () -> Unit = {
