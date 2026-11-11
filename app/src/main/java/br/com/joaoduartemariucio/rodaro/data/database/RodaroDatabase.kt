@@ -7,6 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import br.com.joaoduartemariucio.rodaro.data.backup.models.BackupDao
 import br.com.joaoduartemariucio.rodaro.data.fueling.models.FuelEntryDao
 import br.com.joaoduartemariucio.rodaro.data.fueling.models.FuelEntryModel
 import br.com.joaoduartemariucio.rodaro.data.maintenance.models.ServiceDao
@@ -37,6 +38,8 @@ abstract class RodaroDatabase : RoomDatabase() {
     abstract fun services(): ServiceDao
 
     abstract fun tripRoutes(): TripRouteDao
+
+    abstract fun backup(): BackupDao
 
     companion object {
         private const val FILE_NAME = "rodaro.db"

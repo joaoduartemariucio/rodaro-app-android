@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Straighten
+import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -96,6 +97,7 @@ import java.util.Locale
 fun ProfileScreen(
     onSignIn: () -> Unit,
     onPreferences: () -> Unit,
+    onBackup: () -> Unit,
 ) {
     val context = LocalContext.current
     val dependencies = LocalDependencies.current
@@ -223,6 +225,14 @@ fun ProfileScreen(
 
             SectionTitle(stringResource(R.string.profile_data))
             SectionCard(contentPadding = RowsPadding) {
+                ProfileRow(
+                    icon = Icons.Outlined.Backup,
+                    tint = Palette.blue,
+                    title = stringResource(R.string.profile_backup),
+                    value = stringResource(R.string.profile_backup_caption),
+                    onClick = onBackup,
+                )
+                RowDivider()
                 if (viewModel.account != null) {
                     ProfileRow(
                         icon = Icons.AutoMirrored.Filled.Logout,

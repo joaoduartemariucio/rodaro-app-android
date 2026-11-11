@@ -7,6 +7,9 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.work.WorkManager
 import br.com.joaoduartemariucio.rodaro.BuildConfig
 import br.com.joaoduartemariucio.rodaro.data.PreviewData
+import br.com.joaoduartemariucio.rodaro.data.backup.repositories.RoomBackupRepository
+import br.com.joaoduartemariucio.rodaro.data.backup.serialization.JsonBackupCodec
+import br.com.joaoduartemariucio.rodaro.data.backup.services.ContentResolverDocumentStore
 import br.com.joaoduartemariucio.rodaro.data.common.services.FirebaseAccountService
 import br.com.joaoduartemariucio.rodaro.data.common.services.FirebaseAnalyticsTracker
 import br.com.joaoduartemariucio.rodaro.data.common.services.SystemDateProvider
@@ -21,6 +24,9 @@ import br.com.joaoduartemariucio.rodaro.data.reminders.services.WorkManagerRemin
 import br.com.joaoduartemariucio.rodaro.data.trips.repositories.OpenRouteServiceProvider
 import br.com.joaoduartemariucio.rodaro.data.trips.repositories.RoomRouteRepository
 import br.com.joaoduartemariucio.rodaro.data.vehicles.repositories.RoomVehicleRepository
+import br.com.joaoduartemariucio.rodaro.domain.backup.repositories.BackupRepository
+import br.com.joaoduartemariucio.rodaro.domain.backup.services.BackupCodec
+import br.com.joaoduartemariucio.rodaro.domain.backup.services.DocumentStore
 import br.com.joaoduartemariucio.rodaro.domain.common.services.AccountService
 import br.com.joaoduartemariucio.rodaro.domain.common.services.Analytics
 import br.com.joaoduartemariucio.rodaro.domain.common.services.DateProvider
@@ -50,6 +56,9 @@ class AppDependencies(
     val fuelEntryRepository: FuelEntryRepository = RoomFuelEntryRepository(database.fuelEntries(), database.vehicles())
     val serviceRepository: ServiceRepository = RoomServiceRepository(database.services(), database.vehicles())
     val routeRepository: RouteRepository = RoomRouteRepository(database.tripRoutes())
+    val backupRepository: BackupRepository = RoomBackupRepository(database.backup())
+    val backupCodec: BackupCodec = JsonBackupCodec(BuildConfig.VERSION_NAME)
+    val documentStore: DocumentStore = ContentResolverDocumentStore(context.contentResolver, JsonBackupCodec.MAX_CHARACTERS)
     val routeEstimateProvider: RouteEstimateProvider =
         if (BuildConfig.ORS_API_KEY.isEmpty()) {
             UnavailableRouteEstimateProvider

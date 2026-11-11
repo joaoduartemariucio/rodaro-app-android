@@ -231,7 +231,15 @@
 
   <section id="backup">
     <h2>7. Backup do Android</h2>
-    <p>O Rodaro permite o backup automático do Android. Se ele estiver ativado no seu aparelho, os dados do app, incluindo seus registros, podem ser copiados de forma criptografada para o armazenamento da <b>sua</b> conta Google e restaurados quando você instalar o app em outro aparelho. Esse backup é feito pelo Android e fica na sua conta; nós não temos acesso a ele. Você pode desativá-lo em <b>Configurações → Google → Backup</b>.</p>
+    <p>O Rodaro permite o backup automático do Android. Se ele estiver ativado no seu aparelho, uma cópia criptografada é guardada no armazenamento da <b>sua</b> conta Google e restaurada quando você instalar o app em outro aparelho. Esse backup é feito pelo Android e fica na sua conta; nós não temos acesso a ele. Você pode desativá-lo em <b>Configurações → Google → Backup</b>.</p>
+    <ul>
+      <li><b>O que entra no backup:</b> seus veículos, abastecimentos, serviços, lembretes configurados e rotas salvas, as preferências do app (notificações, moeda, unidades, idioma e as opções de privacidade) e o idioma escolhido para o app.</li>
+      <li><b>O que não entra:</b> identificadores e dados dos serviços do Google (estatísticas, relatórios de falha, notificações, anúncios e sessão da conta). Eles são criados de novo no aparelho novo, e você entra na conta outra vez se quiser.</li>
+      <li><b>Anúncios personalizados:</b> ao restaurar na mesma conta Google, a sua escolha sobre anúncios personalizados volta junto com as outras preferências.</li>
+      <li><b>Depois de apagar os dados:</b> ao usar <b>Apagar dados deste aparelho</b>, a cópia que já está na sua conta Google só é substituída no próximo backup automático do Android, que acontece quando o celular está no Wi-Fi, carregando e sem uso.</li>
+    </ul>
+    <h3>Exportar e restaurar um arquivo</h3>
+    <p>Em <b>Perfil → Backup e exportação</b> você pode salvar um arquivo com todos os seus registros e preferências (JSON) ou uma planilha com abastecimentos e serviços (CSV), e restaurar um arquivo de backup. O app só lê ou grava o arquivo que você escolher. Depois de salvo, o arquivo fica sob o seu controle — no aparelho, no Drive, no e-mail ou onde você o guardar — e deixa de estar sob o controle do app: apagar os dados no Rodaro não apaga esses arquivos. As opções de estatísticas e de anúncios personalizados deste aparelho não são alteradas ao restaurar um arquivo.</p>
   </section>
 
   <section id="permissoes">
@@ -242,7 +250,7 @@
       <li><b>ID de publicidade</b> (<code>AD_ID</code>): usado pelo AdMob, conforme a seção 5.</li>
       <li><b>Execução após reiniciar e manter o aparelho ativo:</b> usadas pelo agendador do Android para que os lembretes continuem valendo depois que o celular é reiniciado.</li>
     </ul>
-    <p>O Rodaro <b>não</b> acessa sua localização, contatos, câmera, microfone, fotos ou arquivos.</p>
+    <p>O Rodaro <b>não</b> acessa sua localização, contatos, câmera, microfone, fotos ou arquivos — exceto o arquivo que você mesmo escolher ao exportar ou restaurar um backup (seção 7).</p>
   </section>
 
   <section id="compartilhamento">

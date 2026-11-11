@@ -1,6 +1,7 @@
 package br.com.joaoduartemariucio.rodaro.presentation.common
 
 import br.com.joaoduartemariucio.rodaro.R
+import br.com.joaoduartemariucio.rodaro.domain.backup.errors.BackupError
 import br.com.joaoduartemariucio.rodaro.domain.common.errors.AccountError
 import br.com.joaoduartemariucio.rodaro.domain.common.errors.RepositoryError
 
@@ -21,6 +22,11 @@ fun Throwable.message(localizer: Localizer): String =
         is AccountError.NoGoogleAccount -> localizer.string(R.string.error_no_google_account)
         is AccountError.Cancelled -> localizer.string(R.string.error_account_failed)
         is AccountError.NotSignedIn -> localizer.string(R.string.account_none)
+        is BackupError.Unreadable -> localizer.string(R.string.error_backup_unreadable)
+        is BackupError.NewerFormat -> localizer.string(R.string.error_backup_newer)
+        is BackupError.Invalid -> localizer.string(R.string.error_backup_invalid)
+        is BackupError.TooLarge -> localizer.string(R.string.error_backup_too_large)
+        is BackupError.Storage -> localizer.string(R.string.error_backup_storage)
         is AccountError.Failed -> localizedMessage ?: localizer.string(R.string.error_account_failed)
         else -> localizedMessage ?: localizer.string(R.string.error_persistence_failed)
     }

@@ -273,6 +273,96 @@ field or drags the list; number fields close it with the keyboard's Done key.
 - **Android:** only drags made with a finger clear focus. Focusing a field under the keyboard
   scrolls it into view, and that automatic scroll must not dismiss the keyboard again.
 
+## Backup
+
+### Android Auto Backup is an allowlist
+
+`backup_rules.xml` (Android 9–11) and `data_extraction_rules.xml` (Android 12+, both
+`<cloud-backup>` and `<device-transfer>`) include only `rodaro.db`, the `preferences`
+SharedPreferences file and AppCompat's language record
+(`androidx.appcompat.app.AppCompatDelegate.application_locales_record_file`). Everything else —
+Firebase, Auth, AdMob and Analytics state, Crashlytics files, the WorkManager database — stays
+out. `BackupRulesTests` checks that the three sections list the same files.
+
+- **Why an allowlist:** the templates that shipped were empty, so Android copied every file in
+  the app's data directory, including SDK identifiers and Firebase's sign-in state. Those belong
+  to one install; restoring them on another phone is wrong at best. An allowlist also keeps
+  whatever a future SDK adds out of the user's Google account by default.
+- **No `BackupAgent`:** the app process is stopped while Auto Backup copies files, and the
+  platform adds `rodaro.db-wal` and `rodaro.db-journal` on its own whenever a database is
+  included, so the database and its write-ahead log travel together and SQLite replays the log on
+  the first open. That is why the `-wal` file is not listed explicitly.
+- **`restoreAnyVersion` stays false:** Android only restores into the same or a newer app
+  version, and Room migrations take an older database forward.
+- **Reminders are rebuilt, not restored:** WorkManager jobs are not backed up; the first
+  vehicle list `load()` after a restore runs `ServiceReminderSync`, which plans them again.
+- **Privacy switches are restored** with the preferences file. That is acceptable because the
+  copy lives in the same Google account and the choice was the user's own; the privacy policy
+  says so.
+- **Cost:** Auto Backup runs only on Wi-Fi, while idle and charging, at most once a day, and the
+  quota is 25 MB per app. A user who just switched phones may not have a recent copy — that is
+  what the manual backup below is for.
+
+### Manual backup is a versioned JSON file and restoring replaces everything
+
+Profile → Backup and export writes a JSON file through the Storage Access Framework
+(`CreateDocument`) and restores one picked with `OpenDocument`. The file is
+`{ format: "rodaro.backup", formatVersion: 1, exportedAt, app, vehicles, fuelEntries,
+serviceEntries, serviceRules, savedRoutes, preferences }`: money as plain decimal strings,
+instants in UTC with milliseconds, lowercase UUIDs (read case-insensitively), enums by their
+raw value (`"car"`, `"oilChange"`, `"BRL"`, `"metric"`, `"pt-BR"`, `"system"`) and the route path as
+a precision-6 polyline. `JsonBackupCodec` reads it; `BackupValidation` (Domain) rejects files
+with repeated ids or records pointing at a vehicle the file does not have; only then does the
+screen show what is in the file next to what is on the phone and ask before replacing.
+
+- **Versioning:** `formatVersion` only grows when an old reader would misread a file. Adding an
+  optional key does not bump it — unknown keys are ignored and missing ones take their defaults.
+  A file with a higher version is refused with "update the app"; each supported version keeps
+  its own decoding branch (`when (version)`), so old files keep working forever.
+- **Why replace instead of merge:** a merge needs rules for the same vehicle edited on two
+  phones, records deleted on one of them and odometers that no longer line up. Replace is easy to
+  explain, and the confirmation shows both counts. Everything happens in one Room transaction
+  (`BackupDao.replaceAll`), so a failure leaves the old data untouched.
+- **What is not imported:** the statistics and personalized-ads switches. They are consent on
+  this device; a file from somewhere else must not turn personalized ads on. Currency, units,
+  language and notification switches are restored, best-effort after the data commit, and the
+  language is applied last because it recreates the activity.
+- **Why the ViewModel uses `viewModelScope`:** other screens launch work from
+  `rememberCoroutineScope`, which is cancelled when the composable leaves composition. A restore
+  must not stop between the commit and the preference and reminder sync, so `BackupViewModel`
+  exposes thin `launch…` wrappers over its `suspend` methods; tests call the `suspend` methods
+  directly. That scope survives recomposition and activity recreation (a language change, a
+  rotation), but not leaving the screen: popping the Navigation 3 entry clears its
+  `ViewModelStore`. So while an action runs, `BackupScreen` disables the top-bar back button
+  and swallows system back with `BackHandler`.
+- **Language per call:** the CSV and its file name take the screen's current `Localizer` as an
+  argument instead of one captured when the ViewModel was created, so an import that changes the
+  language does not leave a later export in the old one.
+- **SAF and process death:** if Android kills the app while the file picker is open, the result
+  is lost and the user picks again. Nothing was written, so retrying is safe.
+- **Fallback store:** when the on-disk database could not be opened (`isUsingFallbackStore`),
+  every action is disabled: exporting an empty in-memory store or importing into it would only
+  mislead.
+- **Cost:** a file from an old phone wipes anything newer on this one; the dialog says so and
+  suggests exporting first. Files are capped at 32 MB of text.
+- **iOS parity:** the format is shared. `app/src/test/resources/backup/v1.json` is the contract:
+  it is never edited, and both apps must keep decoding it.
+
+### Spreadsheet export is a read-only CSV
+
+"Export spreadsheet" writes one CSV with fuel-ups and services of every vehicle, archived ones
+included, sorted by vehicle name (then vehicle, so two vehicles with the same name do not
+interleave), date and odometer. It has a UTF-8 BOM and CRLF line ends so Excel
+opens accents correctly; the separator is `;` when the language uses a decimal comma (pt-BR) and
+`,` otherwise; numbers are plain with the locale's decimal separator; headers are translated and
+units are always metric. Text typed by the user that starts with `=`, `+`, `-`, `@` or a tab gets
+a leading `'` so a spreadsheet does not run it as a formula.
+
+- **Why CSV and one file:** every spreadsheet app opens it with no library; one sheet is easier
+  to filter than one file per vehicle.
+- **Cost:** it cannot be restored — the JSON backup is the restorable format — and saved routes
+  and reminder rules are not in it.
+
 ## Quality gates
 
 ### Coverage is checked on changed lines, not on the whole project
@@ -402,8 +492,9 @@ and a summary of the garage: active vehicles, records (fill-ups plus services) a
 spent. The records and the total include archived vehicles, because they are still the
 user's history; the vehicle count does not, to match the Vehicles tab. Settings rows show
 the current value (notifications, currency and units, language) and all open Preferences.
-About groups rating on Google Play, sharing and the privacy policy. Sign out and delete sit
-last as plain rows, the delete one in red, instead of a full-width red button.
+About groups rating on Google Play, sharing and the privacy policy. "Account and data" opens
+with Backup and export (the JSON backup, restore and CSV), then sign out and delete as plain
+rows, the delete one in red, instead of a full-width red button.
 
 - **Why:** the old screen led with the app's logo and tagline, hid the account below it and
   gave the irreversible delete the most prominent button on the screen.
@@ -625,7 +716,9 @@ ViewModel that performs a user action takes an `analytics: Analytics` parameter 
   `timeline_entry_deleted`, `route_calculated`/`route_vehicle_selected`,
   `route_distance_looked_up`/`route_saved`/`route_deleted`,
   `preference_changed`, `auth_signed_in`/`auth_account_created`, `account_signed_out`,
-  `account_deleted`. Parameters stay small (`mode`, `kind`, `round_trip`, the changed
+  `account_deleted`, `backup_exported`, `backup_spreadsheet_exported`, `backup_imported`.
+  Failed backups log `backup_export_failed`/`backup_import_failed` with a `reason` from a
+  closed set (`unreadable`, `newer_format`, `invalid`, `too_large`, `storage`) and no user data. Parameters stay small (`mode`, `kind`, `round_trip`, the changed
   preference `key`) and never carry values, odometer readings, e-mail or the typed places,
   so no personal or vehicle data leaves the device.
 - **Why a Domain interface:** Presentation must not reach for Firebase directly (the layer

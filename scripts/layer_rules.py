@@ -29,7 +29,7 @@ RULES = [
         "presentation/**/*.kt",
         r"(\bimport\s+br\.com\.joaoduartemariucio\.rodaro\.data\.|"
         r"\b(VehicleModel|FuelEntryModel|ServiceEntryModel|ServiceRuleModel|TripRouteModel|RodaroDatabase|VehicleDao|FuelEntryDao|"
-        r"ServiceDao|TripRouteDao|RoomDatabase|Room[A-Za-z]+Repository|WorkManager[A-Za-z]*)\b)",
+        r"ServiceDao|TripRouteDao|BackupDao|BackupTables|RoomDatabase|Room[A-Za-z]+Repository|WorkManager[A-Za-z]*)\b)",
         "Presentation talks to Domain interfaces only. This type belongs to the Data layer.",
     ),
 ]

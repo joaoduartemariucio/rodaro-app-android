@@ -64,6 +64,9 @@ each feature the usual folders: `entities/`, `repositories/` (interfaces), `calc
     `Calendar` operations of the iOS code, on `java.time` with an explicit `ZoneId`.
 - **Interfaces** — `VehicleRepository`, `FuelEntryRepository`, `ServiceRepository`,
   `DateProvider`, `ReminderScheduler`. Everything `suspend` and returning entities.
+- **Backup** (`backup/`) — `BackupSnapshot` (every table plus `PortablePreferences`),
+  `BackupValidation` (repeated ids, records without their vehicle), `BackupError`, and the
+  `BackupRepository`, `BackupCodec` and `DocumentStore` interfaces.
 
 Calculations never read the clock: "now" is either passed in or taken from the latest
 reading, so the same input always gives the same output.
@@ -84,6 +87,11 @@ WorkManager; `database/` and `common/` hold what is shared.
   and cancellation through.
 - **Services** — `SystemDateProvider` (`common/`), `WorkManagerReminderScheduler`, `ReminderWorker` (posts
   the notification) and `NotificationPermission` (bridges the runtime permission to the activity).
+- **Backup** (`backup/`) — `BackupDao` reads every table and replaces them in one transaction;
+  `RoomBackupRepository` maps them with the feature mappers (`SavedRouteMapper` lives in
+  `trips/mappers/` and is shared with `RoomRouteRepository`); `JsonBackupCodec` and its
+  `…Dto` types read and write the versioned file; `ContentResolverDocumentStore` reads and
+  writes the document the user picked. See [decisions](decisions.md#backup).
 
 ## Presentation
 
@@ -135,8 +143,8 @@ One main host, and each feature owns its own routes and entries:
 - `presentation/<feature>/navigation/` — the feature's `…Route` sealed interface and a
   `…Entries(navigator)` extension on `EntryProviderScope<Route>` that maps each route to its
   screen. Vehicles: `VehiclesRoute` (`VehicleList`, `ArchivedVehicles`, `VehicleDetail`) in
-  `vehiclesEntries`; Trips: `TripsRoute.TripCost` in `tripsEntries`; Profile: `ProfileRoute.Profile`
-  and `ProfileRoute.Auth` in `profileEntries`. Forms stay dialogs
+  `vehiclesEntries`; Trips: `TripsRoute.TripCost` in `tripsEntries`; Profile: `ProfileRoute.Profile`,
+  `ProfileRoute.Auth`, `ProfileRoute.Preferences` and `ProfileRoute.Backup` in `profileEntries`. Forms stay dialogs
   opened by their screen, not destinations.
 - `app/navigation/AppNavHost` — the main and only `NavDisplay`, inside a `Scaffold` with the
   bottom bar. It lists the tabs (Vehicles, Archived, Route, Profile), adds each feature's entries and
@@ -185,11 +193,11 @@ ViewModel reloads.
 |---|---|
 | `domain_no_android` | a file in `domain/` imports `android.*`, `androidx.*` or `com.google.android.*` |
 | `domain_no_outer_layers` | a file in `domain/` imports from `data`, `presentation` or `app` |
-| `presentation_no_data_types` | a file in `presentation/` imports from `data` or mentions a Data type (`VehicleModel`, `RodaroDatabase`, `Room…Repository`, `WorkManager…`, …) |
+| `presentation_no_data_types` | a file in `presentation/` imports from `data` or mentions a Data type (`VehicleModel`, `RodaroDatabase`, `BackupDao`, `BackupTables`, `Room…Repository`, `WorkManager…`, …) |
 
 Comments and string literals are ignored. The Domain rules are exact (they match real
-imports). The Presentation rule also matches names, so **a new Room entity must be added to
-its list**. Android Lint then runs with warnings as errors. See [CI](ci.md).
+imports). The Presentation rule also matches names, so **a new Room entity or DAO must be added to
+its list** (`BackupDao` and its `BackupTables` holder are there for that reason). Android Lint then runs with warnings as errors. See [CI](ci.md).
 
 ## Tests
 

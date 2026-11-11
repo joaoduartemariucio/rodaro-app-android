@@ -1,8 +1,7 @@
 package br.com.joaoduartemariucio.rodaro.data.trips.repositories
 
-import br.com.joaoduartemariucio.rodaro.data.network.Polyline
+import br.com.joaoduartemariucio.rodaro.data.trips.mappers.SavedRouteMapper
 import br.com.joaoduartemariucio.rodaro.data.trips.models.TripRouteDao
-import br.com.joaoduartemariucio.rodaro.data.trips.models.TripRouteModel
 import br.com.joaoduartemariucio.rodaro.domain.common.errors.RepositoryError
 import br.com.joaoduartemariucio.rodaro.domain.trips.entities.SavedRoute
 import br.com.joaoduartemariucio.rodaro.domain.trips.repositories.RouteRepository
@@ -15,11 +14,11 @@ class RoomRouteRepository(
         dao
             .all()
             .filter { vehicleId == null || it.vehicleId == vehicleId }
-            .map { it.toDomain() }
+            .map(SavedRouteMapper::entity)
 
     override suspend fun save(route: SavedRoute) {
         try {
-            dao.upsert(route.toModel())
+            dao.upsert(SavedRouteMapper.model(route))
         } catch (error: Exception) {
             throw RepositoryError.PersistenceFailed(error)
         }
@@ -28,42 +27,4 @@ class RoomRouteRepository(
     override suspend fun delete(id: UUID) {
         dao.delete(id)
     }
-
-    private fun TripRouteModel.toDomain() =
-        SavedRoute(
-            id = id,
-            vehicleId = vehicleId,
-            origin = origin,
-            destination = destination,
-            distanceKm = distanceKm,
-            isRoundTrip = isRoundTrip,
-            hasTolls = hasTolls,
-            tollCost = tollCost,
-            kilometersPerLiter = kilometersPerLiter,
-            pricePerLiter = pricePerLiter,
-            liters = liters,
-            fuelCost = fuelCost,
-            costPerKilometer = costPerKilometer,
-            createdAt = createdAt,
-            path = Polyline.decode(path, Polyline.PRECISION_6),
-        )
-
-    private fun SavedRoute.toModel() =
-        TripRouteModel(
-            id = id,
-            vehicleId = vehicleId,
-            origin = origin,
-            destination = destination,
-            distanceKm = distanceKm,
-            isRoundTrip = isRoundTrip,
-            hasTolls = hasTolls,
-            tollCost = tollCost,
-            kilometersPerLiter = kilometersPerLiter,
-            pricePerLiter = pricePerLiter,
-            liters = liters,
-            fuelCost = fuelCost,
-            costPerKilometer = costPerKilometer,
-            createdAt = createdAt,
-            path = Polyline.encode(path, Polyline.PRECISION_6),
-        )
 }
