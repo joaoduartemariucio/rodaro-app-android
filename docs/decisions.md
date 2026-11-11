@@ -138,7 +138,9 @@ Performance plugin 2.0.2, `play-services-ads` 25.5.0.
   `pub-1068825778444539`. Deploy with `make hosting-deploy`, never with a bare
   `firebase deploy`: the ANP averages (`hosting/public/anp/`) are not in git, and a deploy
   replaces the whole site, so the target rebuilds the JSON from the published copy first (see
-  "ANP averages are published by our own weekly job").
+  "ANP averages are published by our own weekly job"). If that rebuild fails (gov.br down), it
+  stops before deploying; `make hosting-deploy-keep-anp` then ships the site with the live JSON
+  copied unchanged.
 - **Privacy policy:** `https://rodaro.web.app/privacidade` (`hosting/public/privacidade.html`, in
   pt-BR). It lists what stays on the device, what each Google service collects, the Android
   backup, permissions and LGPD rights. It must change whenever a feature, SDK or permission
@@ -907,7 +909,8 @@ km per year, fuel-up count and how long the vehicle has been tracked.
   are opt-in; the plate is masked as `ABC1D**` by default.
 - **"Lançado retroativamente"** marks records whose `createdAt` is more than 30 days after their
   date. Rows from before phase A have `createdAt` equal to the date and cannot be flagged; a
-  footnote says so. `trackedSince` is the earliest of the vehicle's and the records' `createdAt`.
+  footnote says so. "No app desde" is the vehicle's `createdAt`, never a record's: legacy rows
+  have `createdAt` equal to their date, so a back-dated record would claim years of tracking.
 - **Odometer regressions** are computed over every reading (vehicle sign-up, fuel-ups and
   services) and listed with date, source and both values.
 - **`PdfDocument`, not a library:** a few tables of text do not justify a dependency.

@@ -20,6 +20,7 @@ import java.time.format.FormatStyle
 
 object HistoryReportContent {
     private const val NONE = "—"
+    const val MAX_CELL_CHARACTERS = 500
 
     fun document(
         history: VehicleHistory,
@@ -103,8 +104,10 @@ object HistoryReportContent {
                             day(line.entry.date),
                             line.entry.odometer.formattedKilometers(),
                             if (line.isRetroactive) "$service (${localizer.string(R.string.report_retroactive)})" else service,
-                            line.entry.workshop?.takeIf { it.isNotBlank() } ?: NONE,
-                            line.entry.notes.ifBlank { NONE },
+                            line.entry.workshop
+                                ?.takeIf { it.isNotBlank() }
+                                ?.let(::capped) ?: NONE,
+                            capped(line.entry.notes.ifBlank { NONE }),
                             if (costs) money(line.entry.cost) else null,
                         )
                     },
@@ -186,6 +189,8 @@ object HistoryReportContent {
             blocks = blocks,
         )
     }
+
+    fun capped(text: String): String = if (text.length <= MAX_CELL_CHARACTERS) text else text.take(MAX_CELL_CHARACTERS - 1).trimEnd() + "…"
 
     private fun source(
         source: VehicleHistory.Source,

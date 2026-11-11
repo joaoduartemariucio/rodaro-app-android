@@ -197,7 +197,9 @@ class VehicleDetailViewModel(
 
     suspend fun reloadAfterEdit() {
         val previous = vehicle.fipe
+        val previousUf = vehicle.uf
         load()
+        if (vehicle.uf != previousUf) loadRegionalPrices()
         if (vehicle.fipe != previous) {
             backoff.clear(vehicle.id)
             valuationStatus = ValuationStatus.Idle
@@ -253,7 +255,8 @@ class VehicleDetailViewModel(
             val recent =
                 try {
                     fipeCatalog.recentPrices(vehicle.kind, selection.fipeCode, selection.yearCode)
-                } catch (error: RemoteDataError.NotFound) {
+                } catch (error: RemoteDataError) {
+                    if (error is RemoteDataError.NetworkUnavailable || error is RemoteDataError.QuotaExceeded) throw error
                     emptyList()
                 }
             if (recent.isNotEmpty()) return recent

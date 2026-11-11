@@ -185,4 +185,39 @@ class RegionalPriceViewModelTests {
         assertEquals(0, BigDecimal("2.000").compareTo(compared.price))
         assertEquals(PriceComparison.Level.AVERAGE, compared.level)
     }
+
+    @Test
+    fun `editing the vehicle state reloads the regional prices`() =
+        runTest {
+            val vehicles = InMemoryVehicleRepository(listOf(vehicle.copy(uf = null)))
+            val source = FakeSource(table)
+            val cheap = entry("1.850")
+            val viewModel =
+                VehicleDetailViewModel(
+                    vehicle = vehicle.copy(uf = null),
+                    vehicleRepository = vehicles,
+                    fuelEntryRepository = InMemoryFuelEntryRepository(listOf(cheap)),
+                    serviceRepository = InMemoryServiceRepository(),
+                    expenseRepository = InMemoryExpenseRepository(),
+                    dueItemRepository = InMemoryDueItemRepository(),
+                    dateProvider = FixedDateProvider(day(40)),
+                    regionalPriceSource = source,
+                )
+            viewModel.load()
+            viewModel.loadRegionalPrices()
+            assertEquals(0, source.calls)
+
+            viewModel.reloadAfterEdit()
+            assertEquals(0, source.calls)
+
+            vehicles.save(vehicle)
+            viewModel.reloadAfterEdit()
+
+            assertEquals(1, source.calls)
+            assertEquals(setOf(cheap.id), viewModel.priceComparisons.keys)
+
+            vehicles.save(vehicle.copy(uf = null))
+            viewModel.reloadAfterEdit()
+            assertTrue(viewModel.priceComparisons.isEmpty())
+        }
 }

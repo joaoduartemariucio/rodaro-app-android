@@ -11,8 +11,11 @@ import br.com.joaoduartemariucio.rodaro.domain.reports.calculations.VehicleHisto
 import br.com.joaoduartemariucio.rodaro.domain.vehicles.entities.Vehicle
 import br.com.joaoduartemariucio.rodaro.fakes.TestLocalizer
 import br.com.joaoduartemariucio.rodaro.presentation.reports.HistoryReportContent
+import br.com.joaoduartemariucio.rodaro.presentation.reports.pdf.PageSpec
 import br.com.joaoduartemariucio.rodaro.presentation.reports.pdf.ReportBlock
 import br.com.joaoduartemariucio.rodaro.presentation.reports.pdf.ReportDocument
+import br.com.joaoduartemariucio.rodaro.presentation.reports.pdf.ReportLayout
+import br.com.joaoduartemariucio.rodaro.presentation.reports.pdf.TextMeasurer
 import org.junit.Test
 import org.w3c.dom.Element
 import java.io.File
@@ -133,5 +136,36 @@ class HistoryReportContentTests {
         assertTrue(document.table("Distance per year").rows.any { it.first() == "2025" })
         assertTrue(document.text.contains("ABC1D**"))
         assertTrue(document(HistoryOptions(showFullPlate = true)).text.contains("ABC1D23"))
+    }
+
+    @Test
+    fun `long notes and workshops are capped so a row always fits on a page`() {
+        val long = "x".repeat(5_000)
+        val history =
+            VehicleHistories.build(
+                vehicle,
+                fills,
+                listOf(services.first().copy(notes = long, workshop = long)),
+                HistoryOptions(),
+                at("2026-03-01"),
+                utc,
+            )
+
+        val row =
+            HistoryReportContent
+                .document(history, english, utc)
+                .table("Services")
+                .rows
+                .single()
+
+        assertEquals(HistoryReportContent.MAX_CELL_CHARACTERS, row[3].length)
+        assertEquals(HistoryReportContent.MAX_CELL_CHARACTERS, row[4].length)
+        assertTrue(row[4].endsWith("…"))
+        assertEquals("short", HistoryReportContent.capped("short"))
+
+        val page = PageSpec()
+        val measure = TextMeasurer { text, _, width -> (text.length * 4.5f / width + 1).toInt() * 11f }
+        val pages = ReportLayout.paginate(HistoryReportContent.document(history, english, utc), page, measure)
+        assertTrue(pages.flatten().all { it.y + it.height <= page.contentHeight })
     }
 }

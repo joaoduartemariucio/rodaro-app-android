@@ -100,7 +100,7 @@ object VehicleHistories {
                     .mapNotNull { year -> YearReviews.distance(samples, year, zone)?.let { year to it.kilometers } }
                     .toMap()
             }
-        val records = fuel.map { it.date to it.createdAt } + services.map { it.date to it.createdAt }
+        val records = fuel.map { it.date } + services.map { it.date }
 
         return VehicleHistory(
             vehicle = vehicle,
@@ -108,8 +108,8 @@ object VehicleHistories {
             options = options,
             generatedAt = now,
             recordCount = fuel.size + services.size,
-            trackedSince = (records.map { it.second } + vehicle.createdAt).min(),
-            firstRecord = records.minOfOrNull { it.first },
+            trackedSince = vehicle.createdAt,
+            firstRecord = records.minOrNull(),
             odometerTimeline =
                 Odometer
                     .forward(samples)

@@ -115,7 +115,8 @@ make ci
 | `make build` | builds the app and the unit tests |
 | `make test` | runs the unit tests with coverage |
 | `make scripts-test` | runs the Python script tests (stdlib `unittest`) |
-| `make hosting-deploy` | rebuilds `hosting/public/anp/precos-uf.json` from the published copy, then `firebase deploy --only hosting` |
+| `make hosting-deploy` | rebuilds `hosting/public/anp/precos-uf.json` from the published copy, then `firebase deploy --only hosting`; stops without deploying if the rebuild fails |
+| `make hosting-deploy-keep-anp` | downloads the published `precos-uf.json` unchanged, then deploys; for when gov.br is down |
 | `make coverage` | checks changed lines against `origin/main`; `BASE=<ref>` or `MIN_COVERAGE=<n>` to override |
 | `make clean` | removes build output |
 
@@ -200,5 +201,11 @@ expected but **unverified until the first run**; if the deploy is refused, add "
 Consumer" (or "API Keys Viewer") to the same account.
 
 Manual deploys of the site (privacy page, `app-ads.txt`) must use `make hosting-deploy`, which
-rebuilds the ANP JSON first; a bare `firebase deploy` would publish the site without it.
+rebuilds the ANP JSON first; a bare `firebase deploy` would publish the site without it. If the
+rebuild fails — gov.br down or blocking, a layout change, a week that fails the sanity check —
+`make` stops before `firebase deploy` and nothing is published. To ship a site change anyway, run
+`make hosting-deploy-keep-anp`: it downloads the live `precos-uf.json` byte for byte (failing if
+it cannot, so the averages are never dropped) and deploys it with the rest of the site; the
+weekly job adds the new weeks later. Before the first ANP publication (live JSON is a 404) there
+is nothing to keep, so use `make hosting-deploy` or run the workflow first.
 

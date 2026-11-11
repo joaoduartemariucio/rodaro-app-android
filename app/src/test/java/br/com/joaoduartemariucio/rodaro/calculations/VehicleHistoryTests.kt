@@ -140,7 +140,7 @@ class VehicleHistoryTests {
         assertEquals(25.0, history.overallConsumption)
         assertEquals(15, history.recordCount)
         assertEquals(14, history.fuelUps)
-        assertEquals(at("2024-11-01"), history.trackedSince)
+        assertEquals(vehicle.createdAt, history.trackedSince)
         assertEquals(at("2024-12-15"), history.firstRecord)
         assertEquals(at("2026-03-01"), history.generatedAt)
     }

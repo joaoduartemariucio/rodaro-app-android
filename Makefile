@@ -11,7 +11,7 @@ MIN_COVERAGE ?= 80
 ADB ?= adb
 LOG_TAGS := Rodaro.Http:D Rodaro.Analytics:D Rodaro.Reminders:D Rodaro.Startup:D AndroidRuntime:E
 
-.PHONY: ci lint format format-check build test coverage scripts-test hosting-deploy clean logs
+.PHONY: ci lint format format-check build test coverage scripts-test hosting-deploy hosting-deploy-keep-anp clean logs
 
 ci: lint format-check scripts-test build test coverage
 
@@ -39,6 +39,11 @@ scripts-test:
 
 hosting-deploy:
 	$(PYTHON) scripts/anp_prices.py --existing https://rodaro.web.app/anp/precos-uf.json --output hosting/public/anp/precos-uf.json
+	firebase deploy --only hosting
+
+hosting-deploy-keep-anp:
+	mkdir -p hosting/public/anp
+	curl --fail --silent --show-error --location -o hosting/public/anp/precos-uf.json https://rodaro.web.app/anp/precos-uf.json
 	firebase deploy --only hosting
 
 clean:

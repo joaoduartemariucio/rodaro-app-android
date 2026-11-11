@@ -319,4 +319,46 @@ class VehicleValuationTests {
 
         assertTrue(text.contains("2026"), text)
     }
+
+    @Test
+    fun `a history that fails for any reason but connection or quota falls back to the latest price`() =
+        runTest {
+            for (failure in listOf(RemoteDataError.Unreadable(), RemoteDataError.RequestFailed(IllegalStateException("402")))) {
+                val failing =
+                    object : FipeCatalog by fake.catalog {
+                        override suspend fun recentPrices(
+                            kind: VehicleKind,
+                            fipeCode: String,
+                            yearCode: String,
+                        ): List<FipePrice> = throw failure
+                    }
+                val quotes = InMemoryFipeQuoteRepository()
+                val viewModel = makeViewModel(quotes, catalog = failing)
+                viewModel.load()
+
+                viewModel.refreshValuation()
+
+                assertEquals(listOf(YearMonth.of(2026, 11)), quotes.all.map { it.month })
+                assertEquals(ValuationStatus.Idle, viewModel.valuationStatus)
+            }
+
+            for (failure in listOf(RemoteDataError.NetworkUnavailable, RemoteDataError.QuotaExceeded)) {
+                val failing =
+                    object : FipeCatalog by fake.catalog {
+                        override suspend fun recentPrices(
+                            kind: VehicleKind,
+                            fipeCode: String,
+                            yearCode: String,
+                        ): List<FipePrice> = throw failure
+                    }
+                val quotes = InMemoryFipeQuoteRepository()
+                val viewModel = makeViewModel(quotes, catalog = failing)
+                viewModel.load()
+
+                viewModel.refreshValuation()
+
+                assertTrue(quotes.all.isEmpty())
+                assertEquals(ValuationStatus.Failed(failure), viewModel.valuationStatus)
+            }
+        }
 }
